@@ -38,6 +38,7 @@
 #include "Core/ELF/PBPReader.h"
 #include "Core/ELF/ParamSFO.h"
 #include "Core/Util/GameManager.h"
+#include "Core/Util/PathUtil.h"
 
 #include "UI/BackgroundAudio.h"
 #include "UI/EmuScreen.h"
@@ -303,6 +304,12 @@ void MainScreen::CreateMainButtons(UI::ViewGroup *parent, bool portrait) {
 	if (System_GetPropertyBool(SYSPROP_HAS_FILE_BROWSER)) {
 		parent->Add(portrait ? new Choice(ImageID("I_FOLDER_OPEN"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Load", "Load...")))->OnClick.Handle(this, &MainScreen::OnLoadFile);
 	}
+	if (vshInstalled_) {
+		// The PSP's own system software menu, booted straight out of the emulated flash0. Only
+		// offered once there's a firmware in the NAND directory to boot - see InstallUpdateScreen,
+		// which is how one gets there from an official updater.
+		parent->Add(portrait ? new Choice(ImageID("I_PSP"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("PSP menu")))->OnClick.Handle(this, &MainScreen::OnBootVSH);
+	}
 	parent->Add(portrait ? new Choice(ImageID("I_GEAR"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Game Settings", "Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
 	parent->Add(portrait ? new Choice(ImageID("I_INFO"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("About PPSSPP")))->OnClick.Handle(this, &MainScreen::OnCredits);
 
@@ -357,6 +364,10 @@ void MainScreen::CreateViews() {
 	const bool vertical = GetDeviceOrientation() == DeviceOrientation::Portrait;
 
 	auto mm = GetI18NCategory(I18NCat::MAINMENU);
+
+	// Sampled once per view build, and refreshed when an install could have changed the answer -
+	// see dialogFinished().
+	vshInstalled_ = IsVSHInstalled();
 
 	tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 64, TabHolderFlags::Default, nullptr, nullptr, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, 1.0f));
 	ViewGroup *leftColumn = tabHolder_;
@@ -743,6 +754,12 @@ void MainScreen::OnCredits(UI::EventParams &e) {
 	screenManager()->push(new CreditsScreen());
 }
 
+void MainScreen::OnBootVSH(UI::EventParams &e) {
+	// Goes through LaunchFile() like any other boot, via sendMessage below - the VSH is just a PRX
+	// that happens to live in flash0. See docs/VSHBootInvestigation.md for what actually works.
+	LaunchFile(screenManager(), this, GetVSHPath());
+}
+
 void LaunchBuyGold(ScreenManager *screenManager) {
 	if (System_GetPropertyBool(SYSPROP_USE_IAP)) {
 		screenManager->push(new IAPScreen(true));
@@ -791,6 +808,10 @@ void MainScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 			// Not refocusing, so we need to stop the audio.
 			g_BackgroundAudio.SetGame(Path());
 		}
+	} else if (tag == "InstallUpdate") {
+		// A firmware may have just landed in the NAND directory, which is what decides whether the
+		// PSP menu button is there at all.
+		RecreateViews();
 	} else if (tag == "InstallZip") {
 		INFO_LOG(Log::System, "InstallZip finished, refreshing");
 		if (gameBrowsers_.size() >= 2) {

@@ -44,6 +44,7 @@
 #include "Common/System/Request.h"
 
 #include "Core/Util/AtracTrack.h"
+#include "Core/Util/PathUtil.h"
 #include "Core/HLE/sceAtrac.h"
 #include "Core/HLE/sceAudio.h"
 #include "Core/HLE/sceAudiocodec.h"
@@ -2473,8 +2474,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUCommon *gpuDebug, Draw:
 					System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, path.ToString());
 				});
 			}
+			// Not gated on IsVSHInstalled() like the other entry points are - this menu is rebuilt
+			// every frame it's open, and a dev tool doesn't need a disk hit that often.
 			if (ImGui::MenuItem("Load XMB (VSH)")) {
-				System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, (g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx").ToString());
+				System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, GetVSHPath().ToString());
 			}
 			if (ImGui::MenuItem("Open directory...")) {
 				System_BrowseForFolder(reqToken_, "Load", Path(), [](std::string_view value, int) {

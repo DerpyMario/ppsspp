@@ -6,6 +6,20 @@ path (`--vsh`), using a real Sony firmware dump (not checked into the repo - pla
 reverse-engineering of Sony's shipped, undocumented System Software, not a supported PPSSPP
 feature - treat conclusions here as best-effort, not verified against hardware.
 
+## How to get there without a command line
+
+The firmware doesn't have to be a NAND dump. Opening an official updater EBOOT.PBP from the main
+screen brings up `InstallUpdateScreen`, which unpacks it into the NAND directory (see
+`Core/Util/PSARUnpack.h`) - the same place `--vsh` boots from. Once something bootable is there,
+a **PSP menu** button appears next to Load/Settings on the main screen, and the install screen
+offers to boot straight into what it just installed. That mirrors JPCSP's flow, where running the
+updater is followed by a Reboot button into the XMB.
+
+All the entry points - `--vsh`, the main screen button, the install screen, the Windows File menu
+and the ImGui debugger - go through `GetVSHPath()` (`Core/Util/PathUtil.h`), which is also what
+`IsVSHInstalled()` checks to decide whether to offer any of it. The button is gated on that check
+because the boot is a no-op without a firmware, so don't ask it per frame - it hits the disk.
+
 ## Start here
 
 One command boots VSH, runs to a fixed point, and tells you where it got. It starts the emulator,

@@ -34,8 +34,9 @@
 #include "UI/SimpleDialogScreen.h"
 
 // An official PSP firmware updater (a PSP/GAME/UPDATE/EBOOT.PBP, or the folder holding one).
-// Running it isn't going to get anyone anywhere, but the firmware inside it is exactly what the
-// emulated flash0/flash1 want, so offer to unpack it into the NAND directory instead.
+// Running the updater itself isn't going to get anyone anywhere, but the firmware inside it is
+// exactly what the emulated flash0/flash1 want, so offer to unpack it into the NAND directory
+// instead - and then to boot the PSP menu it just installed, which is the point of having it.
 class InstallUpdateScreen : public UISimpleBaseDialogScreen {
 public:
 	// title is the updater's SFO title, which already carries the version ("PSP Update ver 6.61").
@@ -70,11 +71,14 @@ private:
 	std::string title_;
 	u64 fileSize_ = 0;
 	bool overwrites_ = false;
+	// Whether a bootable firmware was already in the NAND directory when this screen opened.
+	bool vshInstalled_ = false;
 
 	std::shared_ptr<InstallState> state_;
 	bool reportedDone_ = false;
 
 	UI::Choice *installChoice_ = nullptr;
+	UI::Choice *bootChoice_ = nullptr;
 	UI::ProgressBar *progressBar_ = nullptr;
 	NoticeView *resultView_ = nullptr;
 };

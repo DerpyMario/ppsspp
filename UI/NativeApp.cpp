@@ -693,7 +693,7 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 
 	boot_filename.clear();
 	if (boot_filename.empty() && cmdLineOptions.bootVSH.value_or(false)) {
-		boot_filename = g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx";
+		boot_filename = GetVSHPath();
 	}
 
 	if (cmdLineOptions.appendConfig.has_value()) {

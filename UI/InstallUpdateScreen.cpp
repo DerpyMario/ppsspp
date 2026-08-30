@@ -21,6 +21,7 @@
 #include "Common/File/FileUtil.h"
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
+#include "Common/System/System.h"
 #include "Common/Thread/Promise.h"
 #include "Common/Thread/ThreadManager.h"
 #include "Common/UI/UI.h"
@@ -51,6 +52,8 @@ InstallUpdateScreen::InstallUpdateScreen(const Path &path, std::string_view titl
 	}
 	// There's no practical way to merge two firmwares, so an install replaces whatever is there.
 	overwrites_ = File::Exists(destination_ / "flash0");
+	// A flash0 that exists isn't necessarily one we can boot the menu out of - that needs vshmain.
+	vshInstalled_ = IsVSHInstalled();
 }
 
 std::string_view InstallUpdateScreen::GetTitle() const {
@@ -99,6 +102,15 @@ void InstallUpdateScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 	resultView_ = container->Add(new NoticeView(NoticeLevel::SUCCESS, "", ""));
 	resultView_->SetVisibility(V_GONE);
+
+	// The reason to install a firmware in the first place - offered right where the install
+	// finished, rather than making the user find their way back to the main screen.
+	bootChoice_ = container->Add(new Choice(iz->T("Boot PSP menu"), ImageID("I_PSP")));
+	bootChoice_->OnClick.Add([](UI::EventParams &e) {
+		// MainScreen picks this up and cancels everything above itself, this screen included.
+		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, GetVSHPath().ToString());
+	});
+	bootChoice_->SetVisibility(V_GONE);
 
 	// The screen can get recreated mid-install (a rotation, say), so pick the status back up.
 	RefreshStatus();
@@ -157,6 +169,11 @@ void InstallUpdateScreen::RefreshStatus() {
 		if (installing) {
 			progressBar_->SetProgress(state_->progress);
 		}
+	}
+	if (bootChoice_) {
+		// Also offered when a firmware was already installed before this screen opened, so opening
+		// an updater you've already applied still gets you to the menu.
+		bootChoice_->SetVisibility(vshInstalled_ || succeeded ? V_VISIBLE : V_GONE);
 	}
 	if (resultView_) {
 		if (!state_ || !state_->done) {

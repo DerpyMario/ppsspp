@@ -57,6 +57,7 @@
 #include "Core/EmuThread.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/System.h"
+#include "Core/Util/PathUtil.h"
 #include "Core/Util/PSARUnpack.h"
 #include "Core/WebServer.h"
 #include "Core/HLE/sceUtility.h"
@@ -797,7 +798,12 @@ int main(int argc, const char* argv[]) {
 		g_Config.memStickDirectory = Path(std::string(getenv("HOME"))) / ".ppsspp";
 #endif
 	}
-	g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	// Same story as --memstick above: ApplyToConfig() has already honoured --nand, so only fill in
+	// the default when there was none. Otherwise --nand silently pointed at the default NAND
+	// directory, which matters now that --vsh boots out of it.
+	if (!cmdLineOptions.nand.has_value()) {
+		g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	}
 	coreParameter.nandRoot = g_Config.nandRootDirectory;
 
 	// Try to find the assets flash0 directory. Often this is from a subdirectory.
@@ -850,7 +856,7 @@ int main(int argc, const char* argv[]) {
 	UpdateUIState(UISTATE_INGAME);
 
 	if (cmdLineOptions.bootVSH.has_value() && cmdLineOptions.bootVSH.value()) {
-		AddToTestsByPath(&testFilenames, (coreParameter.nandRoot / "flash0/vsh/module/vshmain.prx").ToString());
+		AddToTestsByPath(&testFilenames, GetVSHPath().ToString());
 	}
 
 	if (testFilenames.empty()) {
