@@ -59,6 +59,7 @@ const char *PSARCompressionToString(PSARCompression c) {
 	switch (c) {
 	case PSARCompression::None: return "none";
 	case PSARCompression::Zlib: return "zlib";
+	case PSARCompression::Gzip: return "gzip";
 	case PSARCompression::KL4E: return "KL4E";
 	case PSARCompression::KL3E: return "KL3E";
 	case PSARCompression::LZR: return "LZR";
@@ -78,13 +79,17 @@ static u16 ReadU16(const u8 *p) {
 	return value;
 }
 
-static PSARCompression DetectCompression(const u8 *data, size_t size) {
+PSARCompression DetectCompression(const u8 *data, size_t size) {
 	if (size < 4) {
 		return PSARCompression::Unknown;
 	}
 	// Standard zlib stream: CM=8, CINFO=7, then the check byte.
 	if (data[0] == 0x78 && data[1] == 0x9C) {
 		return PSARCompression::Zlib;
+	}
+	// Gzip wrapper around the same deflate data. PSAR entries don't use it, but compressed PRXes do.
+	if (data[0] == 0x1F && data[1] == 0x8B) {
+		return PSARCompression::Gzip;
 	}
 	if (!memcmp(data, "KL4E", 4)) {
 		return PSARCompression::KL4E;

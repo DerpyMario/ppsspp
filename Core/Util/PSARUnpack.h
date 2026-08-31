@@ -41,6 +41,7 @@ class IFileSystem;
 enum class PSARCompression {
 	None,
 	Zlib,
+	Gzip,
 	KL4E,
 	KL3E,
 	LZR,
@@ -48,6 +49,11 @@ enum class PSARCompression {
 };
 
 const char *PSARCompressionToString(PSARCompression c);
+
+// Which of the above a compressed blob is, from the magic at its start. Nothing here is specific to
+// PSAR - encrypted PRXes carry the same set, and a module header's "compressed" bit doesn't say
+// which one - so the module loader uses this too. See Core/HLE/sceKernelModule.cpp.
+PSARCompression DetectCompression(const u8 *data, size_t size);
 
 // PSP hardware revisions, as the updater numbers them. An updater carries one file list per
 // model, so which one you resolve names against decides both what a file is called and whether
@@ -98,7 +104,7 @@ struct PSARUnpackStats {
 	int otherModel = 0;          // Files that belong to a model other than the requested one.
 	int failed = 0;
 	// How many entries used each compression, indexed by PSARCompression.
-	int compressionCounts[6]{};
+	int compressionCounts[7]{};
 };
 
 // psar points at the DATA.PSAR contents, starting with the "PSAR" magic.

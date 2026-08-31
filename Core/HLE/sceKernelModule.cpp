@@ -51,6 +51,7 @@
 #include "Core/FileSystems/FileSystem.h"
 #include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/Util/BlockAllocator.h"
+#include "Core/Util/PSARUnpack.h"
 #include "Core/CoreTiming.h"
 #include "Core/ConfigValues.h"
 #include "Core/PSPLoaders.h"
@@ -993,19 +994,26 @@ static bool KernelImportModuleFuncs(PSPModule *module, u32 *firstImportStubAddr,
 	return true;
 }
 
-static int gzipDecompress(u8 *OutBuffer, int OutBufferLength, u8 *InBuffer) {
+// InBufferLength is how much compressed data there actually is. It used to be assumed equal to
+// OutBufferLength, which is a different (larger) buffer entirely - so zlib was told it could read
+// past the end of the input allocation. A well-formed stream stops at Z_STREAM_END before it gets
+// there, but a payload that isn't really gzip (see the compression detection at the call site) has
+// no such end, and inflate ran off the heap looking for one.
+static int gzipDecompress(u8 *OutBuffer, int OutBufferLength, const u8 *InBuffer, int InBufferLength) {
 	int err;
 	z_stream stream;
 	u8 *outBufferPtr;
 
 	outBufferPtr = OutBuffer;
-	stream.next_in = InBuffer;
-	stream.avail_in = (uInt)OutBufferLength;
+	stream.next_in = (Bytef *)InBuffer;
+	stream.avail_in = (uInt)InBufferLength;
 	stream.next_out = outBufferPtr;
 	stream.avail_out = (uInt)OutBufferLength;
 	stream.zalloc = (alloc_func)0;
 	stream.zfree = (free_func)0;
-	err = inflateInit2(&stream, 16+MAX_WBITS);
+	// 32 rather than 16 means "gzip or zlib, whichever this turns out to be", so the one entry point
+	// covers both wrappers the detection at the call site accepts.
+	err = inflateInit2(&stream, 32+MAX_WBITS);
 	if (err != Z_OK) {
 		return -1;
 	}
@@ -1248,7 +1256,7 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 			g_OSD.Show(OSDType::MESSAGE_WARNING, StringFromFormat("HLE for '%s' has been manually disabled", head->modname));
 		}
 		const u8 *in = ptr;
-		const auto isGzip = head->comp_attribute & 1;
+		const auto isCompressed = head->comp_attribute & 1;
 		// Kind of odd.
 		u32 size = head->psp_size;
 		if (size > elfSize) {
@@ -1287,21 +1295,42 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 		}
 
 		// decompress if required.
-		if (isGzip) {
+		if (isCompressed) {
 			_dbg_assert_(Read32(ptr + 0x150) != ELF_MAGIC);
+
+			// comp_attribute bit 0 only says "compressed", not which method - that's the magic at
+			// the start of the decrypted payload. Assuming gzip meant every other method reported
+			// itself as a broken gzip stream, which is a misleading thing to find in a log.
+			const PSARCompression compression = DetectCompression((const u8 *)ptr, decryptedSize);
 
 			// Can't decompress in place so we need a temporary buffer.
 			u8 *temp = (u8 *)malloc(decryptedSize);
-			_assert_msg_(temp != nullptr, "Failed to allocate gzip decompression buffer (decryptedSize: %d)", decryptedSize);
+			_assert_msg_(temp != nullptr, "Failed to allocate decompression buffer (decryptedSize: %d)", decryptedSize);
 			memcpy(temp, ptr, decryptedSize);
-			int outBytes = gzipDecompress((u8 *)ptr, maxElfSize, temp);
+			int outBytes;
+			switch (compression) {
+			case PSARCompression::Gzip:
+			case PSARCompression::Zlib:
+				outBytes = gzipDecompress((u8 *)ptr, maxElfSize, temp, decryptedSize);
+				break;
+			default:
+				// KL4E and KL3E, which we have no decompressor for at all, and LZR, where we do
+				// (Core/FileSystems/tlzrc.cpp) but it wants the raw stream and nothing here knows
+				// how much of a "2RLZ" blob is header. Nothing safe to try, so don't - a wrong
+				// guess decodes to garbage that then gets loaded and run as MIPS code.
+				outBytes = -1;
+				break;
+			}
 			free(temp);
 			if (outBytes < 0) {
-				// Not necessarily actually gzip - some kd/ system modules (and possibly VSH
-				// modules) use KL4E compression instead, which we don't support decompressing.
 				// Bail out cleanly here rather than falling through to parse whatever's left
 				// in the buffer (still compressed, not a valid ELF) as if it were real code.
-				*error_string = StringFromFormat("Module '%s' decompression failed", head->modname);
+				const bool supported = compression == PSARCompression::Gzip || compression == PSARCompression::Zlib;
+				*error_string = StringFromFormat("Module '%s' decompression failed (%s)", head->modname,
+					PSARCompressionToString(compression));
+				ERROR_LOG(Log::sceModule, "Can't decompress '%s': %s", head->modname, supported
+					? "the stream is damaged or truncated"
+					: StringFromFormat("%s compression is not supported", PSARCompressionToString(compression)).c_str());
 				delete [] newptr;
 				module->Cleanup();
 				kernelObjects.Destroy<PSPModule>(module->GetUID());
@@ -1309,7 +1338,8 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 				error = SCE_KERNEL_ERROR_FILEERR;
 				return nullptr;
 			}
-			INFO_LOG(Log::sceModule, "gzip is enabled in '%s', decompressing (%d -> %d bytes, bufmax=%d).", head->modname, decryptedSize, outBytes, maxElfSize);
+			INFO_LOG(Log::sceModule, "'%s' is %s compressed, decompressing (%d -> %d bytes, bufmax=%d).", head->modname,
+				PSARCompressionToString(compression), decryptedSize, outBytes, maxElfSize);
 		}
 
 		if (fakeLoadedModule) {
