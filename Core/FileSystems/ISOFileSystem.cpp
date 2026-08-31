@@ -315,6 +315,14 @@ void ISOFileSystem::ReadDirectory(TreeEntry *root) const {
 }
 
 const ISOFileSystem::TreeEntry *ISOFileSystem::GetFromPath(std::string_view path, bool catchError) {
+	// The constructor gives up without building a tree when the image has no readable volume
+	// descriptor - which is the normal answer for anything that simply isn't an ISO, like the
+	// updater archive PSARUnpack probes here. Every caller already copes with a null entry, but
+	// this walked straight into treeroot->valid and took the process with it.
+	if (!treeroot) {
+		return nullptr;
+	}
+
 	const size_t pathLength = path.length();
 
 	if (pathLength == 0) {

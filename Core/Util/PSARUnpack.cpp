@@ -925,6 +925,12 @@ static ISOFileSystem *OpenDisc(const Path &filename, FileLoader *loader, IHandle
 		return nullptr;
 	}
 	ISOFileSystem *iso = new ISOFileSystem(hAlloc, device);
+	if (!iso->Error().empty()) {
+		// Not a disc image at all, which is exactly what a loose DATA.BIN or a PBP looks like.
+		DEBUG_LOG(Log::Loader, "Not opening '%s' as a disc: %s", filename.c_str(), iso->Error().c_str());
+		delete iso;
+		return nullptr;
+	}
 	if (!iso->GetFileInfo("/" + std::string(UPDATE_DIR_SUFFIX)).exists) {
 		delete iso;
 		return nullptr;
