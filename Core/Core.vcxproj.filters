@@ -363,6 +363,9 @@
     <ClCompile Include="Util\PPGeDraw.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="Util\KL4E.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="Util\PSARUnpack.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -1687,6 +1690,9 @@
       <Filter>HW</Filter>
     </ClInclude>
     <ClInclude Include="Util\PPGeDraw.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\KL4E.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\PSARUnpack.h">

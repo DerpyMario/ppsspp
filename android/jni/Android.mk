@@ -810,6 +810,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/Util/GameManager.cpp \
   $(SRC)/Core/Util/BlockAllocator.cpp \
   $(SRC)/Core/Util/PPGeDraw.cpp \
+  $(SRC)/Core/Util/KL4E.cpp \
   $(SRC)/Core/Util/PSARUnpack.cpp \
   $(SRC)/Core/Util/RecentFiles.cpp \
   $(SRC)/Core/Util/VideoPlayer.cpp \
@@ -1051,6 +1052,7 @@ ifeq ($(UNITTEST),1)
     $(SRC)/unittest/TestVFS.cpp \
     $(SRC)/unittest/TestDemangle.cpp \
     $(SRC)/unittest/TestLzrc.cpp \
+    $(SRC)/unittest/TestKL4E.cpp \
     $(SRC)/unittest/TestZipSlip.cpp \
     $(SRC)/unittest/UnitTest.cpp
 

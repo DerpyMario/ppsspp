@@ -51,6 +51,7 @@
 #include "Core/FileSystems/FileSystem.h"
 #include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/Util/BlockAllocator.h"
+#include "Core/Util/KL4E.h"
 #include "Core/Util/PSARUnpack.h"
 #include "Core/CoreTiming.h"
 #include "Core/ConfigValues.h"
@@ -1313,11 +1314,18 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 			case PSARCompression::Zlib:
 				outBytes = gzipDecompress((u8 *)ptr, maxElfSize, temp, decryptedSize);
 				break;
+			case PSARCompression::KL4E:
+			case PSARCompression::KL3E:
+				// What a 6.6x firmware uses for most of flash0 - see Core/Util/KL4E.h. The 4 bytes
+				// of magic aren't part of the stream.
+				outBytes = DecompressKLE((u8 *)ptr, maxElfSize, temp + 4, decryptedSize - 4,
+					compression == PSARCompression::KL4E);
+				break;
 			default:
-				// KL4E and KL3E, which we have no decompressor for at all, and LZR, where we do
-				// (Core/FileSystems/tlzrc.cpp) but it wants the raw stream and nothing here knows
-				// how much of a "2RLZ" blob is header. Nothing safe to try, so don't - a wrong
-				// guess decodes to garbage that then gets loaded and run as MIPS code.
+				// LZR, where we do have a decompressor (Core/FileSystems/tlzrc.cpp) but it wants
+				// the raw stream and nothing here knows how much of a "2RLZ" blob is header, plus
+				// anything unrecognized. Nothing safe to try, so don't - a wrong guess decodes to
+				// garbage that then gets loaded and run as MIPS code.
 				outBytes = -1;
 				break;
 			}

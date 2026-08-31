@@ -7,6 +7,13 @@ Additional code by many contributors, see the Credits screen
 
 Originally released under the GPL 2.0 (and later) in November 2012
 
+**Licensing note for this fork:** `Core/Util/KL4E.cpp` is ported from
+[pspdecrypt](https://github.com/John-K/pspdecrypt) (KL4E/KL3E reverse engineered from the 6.60
+firmware by artart78), which is GPL-3.0. GPL-2.0-or-later permits that, but the combined work is
+GPL-3.0 rather than GPL-2.0 - so builds of this fork are GPL-3.0. Upstream PPSSPP keeps itself
+GPL-2-compatible, so this file would need artart78 to relicense before any of it could go there.
+Everything else in the tree is unchanged, GPL-2.0-or-later.
+
 Official website: https://www.ppsspp.org/
 
 Discord: https://discord.gg/5NJB6dD

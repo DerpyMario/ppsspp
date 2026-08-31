@@ -34,6 +34,7 @@
 #include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/Loaders.h"
 #include "Core/System.h"
+#include "Core/Util/KL4E.h"
 #include "Core/Util/PSARUnpack.h"
 
 extern "C" {
@@ -685,6 +686,17 @@ int PSARReader::NextEntry(std::string *error) {
 				const int zResult = uncompress(entryData_.data(), &destLen, block2_.data(), decoded);
 				if (zResult != Z_OK || destLen != expandedSize) {
 					WARN_LOG(Log::Loader, "PSAR: inflate failed for '%s' (%d)", entryName_.c_str(), zResult);
+					entryData_.clear();
+				}
+			} else if (entryCompression_ == PSARCompression::KL4E || entryCompression_ == PSARCompression::KL3E) {
+				// A 6.6x firmware stores a good part of flash0 this way, and these used to be
+				// counted as failures and left out of the unpacked firmware entirely.
+				entryData_.resize(expandedSize);
+				const int written = DecompressKLE(entryData_.data(), expandedSize, block2_.data() + 4, decoded - 4,
+					entryCompression_ == PSARCompression::KL4E);
+				if (written != (int)expandedSize) {
+					WARN_LOG(Log::Loader, "PSAR: %s decompression failed for '%s' (%d, wanted %u)",
+						PSARCompressionToString(entryCompression_), entryName_.c_str(), written, expandedSize);
 					entryData_.clear();
 				}
 			}

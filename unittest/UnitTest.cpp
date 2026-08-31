@@ -2889,6 +2889,7 @@ bool TestThreadManager();
 bool TestVFS();
 bool TestZipSlip();
 bool TestLzrc();
+bool TestKL4E();
 bool TestDemangle();
 
 // Tab/Shift+Tab focus navigation walks the view hierarchy in declaration order rather than by
@@ -3021,6 +3022,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(CmdLine),
 	TEST_ITEM(ZipSlip),
 	TEST_ITEM(Lzrc),
+	TEST_ITEM(KL4E),
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),
