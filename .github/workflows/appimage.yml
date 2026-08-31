@@ -3,7 +3,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-    - master
+    - nand-bios-support
     # For testing.
     #- test_arch
     tags:
@@ -15,7 +15,7 @@ on:
     - 'appveyor.yml'
   pull_request:
     branches:
-    - master
+    - nand-bios-support
     paths-ignore:
     - '*.{txt,md}'
     - 'Tools/**'
