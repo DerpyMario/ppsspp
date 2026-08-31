@@ -1,27 +1,6 @@
 name: Build
 
-on:
-  workflow_dispatch: {}
-  push:
-    branches:
-    - nand-bios-support
-    # For testing.
-    - actions
-    tags:
-      - "v*.*"
-    paths-ignore:
-    - '*.{txt,md}'
-    - 'Tools/**'
-    - '.{editorconfig,gitattributes,gitignore}'
-    - 'appveyor.yml'
-  pull_request:
-    branches:
-    - master
-    paths-ignore:
-    - '*.{txt,md}'
-    - 'Tools/**'
-    - '.{editorconfig,gitattributes,gitignore}'
-    - 'appveyor.yml'
+on: [workflow_dispatch]
 
 env:
   BUILD_CONFIGURATION: Release
