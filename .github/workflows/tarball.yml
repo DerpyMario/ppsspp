@@ -2,6 +2,7 @@ name: Generate Source Tarball
 
 # Trigger whenever a release is created
 on:
+  workflow_dispatch: {}
   release:
     types:
       - created

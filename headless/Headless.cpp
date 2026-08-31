@@ -639,9 +639,10 @@ int main(int argc, const char* argv[]) {
 		printf("Firmware %s (model %s): %d entries, %d files written, %d directories, %d unresolved names, %d for other models, %d failed\n",
 			stats.firmwareVersion.c_str(), PSPModelGenerationToString(unpackOptions.model), stats.entries, stats.written,
 			stats.directories, stats.unnamed, stats.otherModel, stats.failed);
-		printf("Compression: none=%d zlib=%d KL4E=%d KL3E=%d LZR=%d unknown=%d\n",
+		printf("Compression: none=%d zlib=%d gzip=%d KL4E=%d KL3E=%d LZR=%d unknown=%d\n",
 			stats.compressionCounts[(int)PSARCompression::None],
 			stats.compressionCounts[(int)PSARCompression::Zlib],
+			stats.compressionCounts[(int)PSARCompression::Gzip],
 			stats.compressionCounts[(int)PSARCompression::KL4E],
 			stats.compressionCounts[(int)PSARCompression::KL3E],
 			stats.compressionCounts[(int)PSARCompression::LZR],

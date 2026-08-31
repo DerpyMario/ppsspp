@@ -1,6 +1,7 @@
 name: Generate Docker Layer
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - master
