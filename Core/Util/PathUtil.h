@@ -40,6 +40,14 @@ bool HasParentDirComponent(std::string_view path);
 // strings that would otherwise become host filesystem path components.
 bool HasPathTraversal(std::string_view path);
 
+// The PSP's system software menu - the XMB, known internally as the VSH. It boots straight out of
+// the emulated flash0, which is filled either by unpacking an official firmware updater (see
+// Core/Util/PSARUnpack.h) or by dumping a real PSP's NAND. See docs/VSHBootInvestigation.md.
+Path GetVSHPath();
+// Whether the NAND directory actually holds a firmware we could boot the PSP menu from. Cheap
+// enough for a UI to ask when building a screen, but it does hit the disk - don't call it per frame.
+bool IsVSHInstalled();
+
 Path FindConfigFile(const Path &searchPath, std::string_view baseFilename, bool *exists);
 Path GetSysDirectory(PSPDirectories directoryType);
 bool CreateSysDirectories();

@@ -75,6 +75,7 @@ protected:
 	void OnLoadFile(UI::EventParams &e);
 	void OnGameSettings(UI::EventParams &e);
 	void OnCredits(UI::EventParams &e);
+	void OnBootVSH(UI::EventParams &e);
 	void OnPPSSPPOrg(UI::EventParams &e);
 	void OnForums(UI::EventParams &e);
 	void OnDownloadUpgrade(UI::EventParams &e);
@@ -93,6 +94,9 @@ protected:
 	bool lastVertical_ = false;
 	bool confirmedTemporary_ = false;
 	bool searchChanged_ = false;
+	// Whether there's a firmware in the NAND directory to boot the PSP menu from. Sampled in
+	// CreateViews() rather than asked per frame, since answering it hits the disk.
+	bool vshInstalled_ = false;
 	std::string searchFilter_;
 
 	friend class RemoteISOBrowseScreen;

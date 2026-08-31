@@ -31,6 +31,7 @@
 #include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/KeyMap.h"
 #include "Core/Screenshot.h"
+#include "Core/Util/PathUtil.h"
 #include "Windows/MainWindowMenu.h"
 #include "Windows/MainWindow.h"
 #include "Windows/W32Util/DialogManager.h"
@@ -472,7 +473,7 @@ namespace MainWindow {
 			break;
 
 		case ID_FILE_LOAD_VSH:
-			System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, (g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx").ToString());
+			System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, GetVSHPath().ToString());
 			break;
 
 		case ID_FILE_OPEN_NEW_INSTANCE:
@@ -1043,6 +1044,11 @@ namespace MainWindow {
 				return;
 			}
 		}
+
+		// Nothing to boot without a firmware in the NAND directory. Checked here rather than in
+		// SetIngameMenuItemStates(), which UpdateCommands() also runs on every keypress - this only
+		// runs when a menu is about to open (WM_INITMENUPOPUP), so the disk hit is fine.
+		EnableMenuItem(menu, ID_FILE_LOAD_VSH, IsVSHInstalled() ? MF_ENABLED : MF_GRAYED);
 
 #define CHECKITEM(item,value) 	CheckMenuItem(menu,item,MF_BYCOMMAND | ((value) ? MF_CHECKED : MF_UNCHECKED));
 		CHECKITEM(ID_DEBUG_IGNOREILLEGALREADS, g_Config.bIgnoreBadMemAccess);

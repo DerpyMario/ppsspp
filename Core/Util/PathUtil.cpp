@@ -30,6 +30,16 @@ bool HasPathTraversal(std::string_view path) {
 	return path == "." || path == "..";
 }
 
+Path GetVSHPath() {
+	// Real hardware gets here through the kernel's own bootstrap in flash0:/reboot.bin, which we
+	// don't emulate - we load vshmain.prx directly instead, the same shortcut JPCSP's --vsh takes.
+	return g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx";
+}
+
+bool IsVSHInstalled() {
+	return File::Exists(GetVSHPath());
+}
+
 Path FindConfigFile(const Path &searchPath, std::string_view baseFilename, bool *exists) {
 	// Don't search for an absolute path.
 	if (baseFilename.size() > 1 && baseFilename[0] == '/') {
