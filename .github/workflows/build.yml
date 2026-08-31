@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches:
-    - master
+    - nand-bios-support
     # For testing.
     - actions
     tags:
