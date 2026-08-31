@@ -350,6 +350,49 @@ static Path NormalizePath(const Path &path) {
 #endif
 }
 
+// An official firmware updater expects the archive it installs to sit beside its EBOOT.PBP as
+// DATA.BIN, which is how it arrives when the updater was pressed onto a UMD. A downloaded updater
+// carries the very same archive inside the PBP instead, as DATA.PSAR (see Core/Util/PSARUnpack.h),
+// and without a DATA.BIN it stops at "This disc cannot be loaded" before doing anything.
+//
+// So hand it one, unpacked next to the ini rather than into the user's own folder, and only when
+// there isn't a real DATA.BIN there already - a file the user put there wins.
+static void ProvideUpdaterDataBin(FileLoader *fileLoader, DirectoryFileSystem *fs, const Path &host0Dir, std::string_view discId) {
+	if (File::Exists(host0Dir / "DATA.BIN")) {
+		return;
+	}
+	PBPReader pbp(fileLoader);
+	if (!pbp.IsValid() || pbp.IsELF()) {
+		return;
+	}
+	const size_t psarSize = pbp.GetSubFileSize(PBP_UNKNOWN_PSAR);
+	if (psarSize < 16) {
+		// No archive in there, so this is an ordinary homebrew PBP and none of this applies.
+		return;
+	}
+
+	// Keyed by size so two different updaters don't collide, and reused once written - these run to
+	// tens of megabytes and nothing about one changes between boots.
+	const Path cacheDir = GetSysDirectory(DIRECTORY_APP_CACHE);
+	const Path cached = cacheDir / StringFromFormat("UPDATE_%s_%lld.BIN", std::string(discId).c_str(), (long long)psarSize);
+	File::FileInfo existing;
+	if (!File::GetFileInfo(cached, &existing) || existing.size != (s64)psarSize) {
+		std::vector<u8> psar;
+		if (!pbp.GetSubFile(PBP_UNKNOWN_PSAR, &psar) || psar.size() != psarSize) {
+			WARN_LOG(Log::Loader, "Couldn't read DATA.PSAR out of the PBP, not providing DATA.BIN");
+			return;
+		}
+		File::CreateFullPath(cacheDir);
+		if (!File::WriteDataToFile(false, psar.data(), psar.size(), cached)) {
+			WARN_LOG(Log::Loader, "Couldn't write %s, not providing DATA.BIN", cached.c_str());
+			return;
+		}
+		INFO_LOG(Log::Loader, "Extracted the PBP's DATA.PSAR (%lld bytes) to %s", (long long)psarSize, cached.c_str());
+	}
+	INFO_LOG(Log::Loader, "Providing host0:/DATA.BIN from the PBP's own DATA.PSAR");
+	fs->AddFileRedirect("DATA.BIN", cached);
+}
+
 bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, bool loadGameConfigs, std::string *error_string) {
 	// This is really just for headless, might need tweaking later.
 	if (PSP_CoreParameter().mountIsoLoader != nullptr) {
@@ -432,6 +475,7 @@ bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, bool load
 	}
 
 	auto fs = std::make_shared<DirectoryFileSystem>(&pspFileSystem, host0Dir, FileSystemFlags::SIMULATE_FAT32 | FileSystemFlags::CARD);
+	ProvideUpdaterDataBin(fileLoader, fs.get(), host0Dir, discId);
 	pspFileSystem.Mount("host0:", fs);
 
 	std::string finalName = ms_path + file;

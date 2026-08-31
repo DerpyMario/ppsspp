@@ -81,7 +81,9 @@
 #include "Common/ExceptionHandlerSetup.h"
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
+#include "Common/File/FileUtil.h"
 #include "Core/Config.h"
+#include "Core/FileSystems/DirectoryFileSystem.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Common/File/VFS/VFS.h"
 #include "Common/File/VFS/DirectoryReader.h"
@@ -2890,6 +2892,60 @@ bool TestVFS();
 bool TestZipSlip();
 bool TestLzrc();
 bool TestKL4E();
+
+// DirectoryFileSystem::AddFileRedirect makes one guest filename resolve to a host file outside the
+// mounted directory - how a firmware updater is handed the DATA.BIN it expects beside its EBOOT.PBP
+// when that archive really lives inside the PBP. Opening and stat'ing have to follow the redirect
+// (they take different paths through the class, which is the easy thing to get half-right), and
+// nothing else about the mount may change.
+bool TestFileRedirect() {
+	const Path tempDir = Path(g_Config.internalDataDirectory) / "redirect_test";
+	const Path mounted = tempDir / "mounted";
+	const Path elsewhere = tempDir / "elsewhere";
+	File::CreateFullPath(mounted);
+	File::CreateFullPath(elsewhere);
+
+	const std::string realContents = "i am really next to the eboot";
+	const std::string hiddenContents = "i am somewhere else entirely";
+	EXPECT_TRUE(File::WriteDataToFile(false, realContents.data(), realContents.size(), mounted / "EBOOT.PBP"));
+	EXPECT_TRUE(File::WriteDataToFile(false, hiddenContents.data(), hiddenContents.size(), elsewhere / "cached.bin"));
+
+	SequentialHandleAllocator alloc;
+	DirectoryFileSystem fs(&alloc, mounted, FileSystemFlags::SIMULATE_FAT32 | FileSystemFlags::CARD);
+
+	// Before the redirect, DATA.BIN simply isn't there.
+	EXPECT_FALSE(fs.GetFileInfo("DATA.BIN").exists);
+
+	fs.AddFileRedirect("DATA.BIN", elsewhere / "cached.bin");
+
+	// Stat has to see it, at the size of the file it really points at.
+	PSPFileInfo info = fs.GetFileInfo("DATA.BIN");
+	EXPECT_TRUE(info.exists);
+	EXPECT_EQ_INT((int)info.size, (int)hiddenContents.size());
+	// The updater asks with a leading slash, and PSP paths are case-insensitive.
+	EXPECT_TRUE(fs.GetFileInfo("/DATA.BIN").exists);
+	EXPECT_TRUE(fs.GetFileInfo("data.bin").exists);
+
+	// And opening it has to read through to the redirected file, not the mounted directory.
+	int handle = fs.OpenFile("DATA.BIN", FILEACCESS_READ);
+	EXPECT_TRUE(handle > 0);
+	char buf[64]{};
+	const size_t read = fs.ReadFile((u32)handle, (u8 *)buf, (s64)hiddenContents.size());
+	fs.CloseFile((u32)handle);
+	EXPECT_EQ_INT((int)read, (int)hiddenContents.size());
+	EXPECT_TRUE(std::string(buf, read) == hiddenContents);
+
+	// Everything else about the mount is untouched, and the redirect doesn't invent a directory
+	// entry for a file that isn't in there.
+	EXPECT_TRUE(fs.GetFileInfo("EBOOT.PBP").exists);
+	EXPECT_FALSE(fs.GetFileInfo("NOPE.BIN").exists);
+	for (const PSPFileInfo &entry : fs.GetDirListing("/")) {
+		EXPECT_FALSE(entry.name == "DATA.BIN");
+	}
+
+	File::DeleteDirRecursively(tempDir);
+	return true;
+}
 bool TestDemangle();
 
 // Tab/Shift+Tab focus navigation walks the view hierarchy in declaration order rather than by
@@ -3023,6 +3079,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(ZipSlip),
 	TEST_ITEM(Lzrc),
 	TEST_ITEM(KL4E),
+	TEST_ITEM(FileRedirect),
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),

@@ -91,6 +91,13 @@ public:
 	bool ComputeRecursiveDirSizeIfFast(const std::string &path, int64_t *size) override;
 	void Describe(char *buf, size_t size) const override { snprintf(buf, size, "Dir: %s", basePath.c_str()); }
 
+	// Makes one guest filename resolve to a host file that isn't under basePath. The firmware
+	// updater wants a DATA.BIN beside its EBOOT.PBP, and when it was downloaded rather than pressed
+	// onto a UMD that archive is inside the PBP instead - see Load_PSP_ELF_PBP in Core/PSPLoaders.cpp.
+	// Only opening and stat'ing follow the redirect; it deliberately doesn't appear in a directory
+	// listing, since nothing needs it to and the file isn't really there.
+	void AddFileRedirect(std::string_view guestFilename, const Path &hostPath);
+
 private:
 	struct OpenFileEntry {
 		DirectoryFileHandle hFile;
@@ -103,7 +110,12 @@ private:
 	Path basePath;
 	IHandleAllocator *hAlloc;
 	FileSystemFlags flags;
+	// Keyed by the normalized guest name (no leading slash, upper case) - see AddFileRedirect.
+	// Almost always empty, so the lookup costs nothing in the normal case.
+	std::map<std::string, Path> redirects_;
 
+	// True if internalPath names a redirected file, filling in where it really lives.
+	bool ResolveRedirect(std::string_view internalPath, Path *hostPath) const;
 	Path GetLocalPath(std::string_view internalPath) const;
 };
 
