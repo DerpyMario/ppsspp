@@ -183,12 +183,10 @@ namespace MIPSInt {
 
 		// These codes might be PSP-specific, they don't match regular MIPS cache codes very well
 
-		// NOTE: If you add support for more, make sure they are handled in the various Jit::Comp_Cache.
-		switch (func) {
-		// Icache
-		case 8:
-			// Invalidate the instruction cache at this address.
-			// We assume the CPU won't be reset during this, so no locking.
+		// Invalidate the instruction cache at this address, so the JIT stops running whatever it
+		// compiled from the old contents. We assume the CPU won't be reset during this, so no
+		// locking.
+		const auto invalidateICache = [&]() {
 			if (MIPSComp::jit) {
 				// Let's over invalidate to be super safe.
 				uint32_t alignedAddr = addr & ~0x3F;
@@ -205,9 +203,16 @@ namespace MIPSInt {
 					WARN_LOG_REPORT_ONCE(icacheInvalidatePC, Log::JIT, "Invalidating address near PC: %08x (%08x + %d) at PC=%08x", addr, R(rs), imm, PC);
 				}
 			}
+		};
+
+		// NOTE: If you add support for more, make sure they are handled in the various Jit::Comp_Cache.
+		switch (func) {
+		// Icache
+		case 8:
+			invalidateICache();
 			break;
 
-		// Dcache
+		// Dcache. None of these can change what the CPU would fetch, so the JIT doesn't care.
 		case 24:
 			// "Create Dirty Exclusive" - for avoiding a cacheline fill before writing to it.
 			// Will cause garbage on the real machine so we just ignore it, the app will overwrite the cacheline.
@@ -215,13 +220,23 @@ namespace MIPSInt {
 		case 25:  // Hit Invalidate - zaps the line if present in cache. Should not writeback???? scary.
 			// No need to do anything.
 			break;
+		case 26:  // Hit Writeback. Pushes dirty lines out to memory, which we always are already.
+			break;
 		case 27:  // D-cube. Hit Writeback Invalidate.  Tony Hawk Underground 2
 			break;
 		case 30:  // GTA LCS, a lot. Fill (prefetch).   Tony Hawk Underground 2
 			break;
 
 		default:
+			// The Allegrex's cache encodings aren't the standard MIPS ones and aren't fully
+			// documented, so an unidentified op might well be an icache invalidate - assume it is.
+			// Over-invalidating costs a recompile; missing one runs stale code, which is how the
+			// VSH's Skype module (which writes ~74KB of code and flushes it word by word with
+			// funcs 26 and 4, rather than calling sceKernelIcacheInvalidateRange like a game would)
+			// ended up executing a block the JIT had compiled from the previous contents.
+			invalidateICache();
 			DEBUG_LOG(Log::CPU, "cache instruction affecting %08x : function %i", addr, func);
+			break;
 		}
 
 		PC += 4;

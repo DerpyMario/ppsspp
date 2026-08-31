@@ -408,6 +408,7 @@ namespace MIPSComp
 		switch (func) {
 		case 24: break;
 		case 25: break;
+		case 26: break;
 		case 27: break;
 		case 30: break;
 		default:
