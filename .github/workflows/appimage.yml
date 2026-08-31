@@ -1,5 +1,6 @@
 name: Generate Linux AppImage
 on:
+  workflow_dispatch: {}
   push:
     branches:
     - master
