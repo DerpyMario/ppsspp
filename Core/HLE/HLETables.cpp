@@ -57,6 +57,7 @@
 #include "sceNetAdhocMatching.h"
 #include "sceNp.h"
 #include "sceMpeg.h"
+#include "sceNwman.h"
 #include "sceOpenPSID.h"
 #include "sceResmgr.h"
 #include "sceP3da.h"
@@ -329,6 +330,7 @@ void RegisterAllModules() {
 	Register_sceResmgr();
 
 	// add new modules here.
+	Register_sceNwman_driver();
 
 	// Not ready to enable this due to apparent softlocks in Patapon 3.
 	// Register_sceNpMatching2();

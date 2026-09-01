@@ -375,6 +375,9 @@
     <ClCompile Include="ELF\ParamSFO.cpp">
       <Filter>ELF</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\sceNwman.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
     <ClCompile Include="HLE\sceOpenPSID.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
@@ -1703,6 +1706,9 @@
     </ClInclude>
     <ClInclude Include="ELF\ParamSFO.h">
       <Filter>ELF</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\sceNwman.h">
+      <Filter>HLE\Libraries</Filter>
     </ClInclude>
     <ClInclude Include="HLE\sceOpenPSID.h">
       <Filter>HLE\Libraries</Filter>

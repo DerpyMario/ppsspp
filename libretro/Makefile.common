@@ -812,6 +812,7 @@ SOURCES_CXX += \
 	       $(COREDIR)/HLE/sceNetResolver.cpp \
 	       $(COREDIR)/HLE/proAdhocServer.cpp \
 	       $(COREDIR)/HLE/proAdhoc.cpp \
+	       $(COREDIR)/HLE/sceNwman.cpp \
 	       $(COREDIR)/HLE/sceOpenPSID.cpp \
 	       $(COREDIR)/HLE/sceResmgr.cpp \
 	       $(COREDIR)/HLE/sceP3da.cpp \

@@ -713,6 +713,8 @@ add_library(Core STATIC
 	Util/BlockAllocator.h
 	Util/PPGeDraw.cpp
 	Util/PPGeDraw.h
+	HLE/sceNwman.cpp
+	HLE/sceNwman.h
 	Util/KL4E.cpp
 	Util/KL4E.h
 	Util/PSARUnpack.cpp

@@ -135,6 +135,7 @@
     <ClCompile Include="..\..\Core\HLE\sceNetAdhoc.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceNetAdhocMatching.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceNp.cpp" />
+    <ClCompile Include="..\..\Core\HLE\sceNwman.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceOpenPSID.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceResmgr.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceP3da.cpp" />
@@ -564,6 +565,7 @@
     <ClInclude Include="..\..\Core\HLE\sceNetAdhoc.h" />
     <ClInclude Include="..\..\Core\HLE\sceNetAdhocMatching.h" />
     <ClInclude Include="..\..\Core\HLE\sceNp.h" />
+    <ClInclude Include="..\..\Core\HLE\sceNwman.h" />
     <ClInclude Include="..\..\Core\HLE\sceOpenPSID.h" />
     <ClInclude Include="..\..\Core\HLE\sceResmgr.h" />
     <ClInclude Include="..\..\Core\HLE\sceP3da.h" />
