@@ -86,6 +86,61 @@ checking what is actually on screen means running the app build. From headless, 
 the per-frame display list signature (see the red error screen section): a screen that is finished
 changing repeats byte-identically, and a live menu does not.
 
+## Booting a 1.00 firmware
+
+Everything above was worked out against 6.61. A 1.00 dump - what the oldest official updater
+installs - stopped at a black screen, and four separate things were in the way. All four are
+version-independent bugs that 6.61 happened not to expose.
+
+1. **The module attributes were read from the wrong copy.** Every module carries them twice: in the
+   ELF's module info, and in the `~PSP` header, which is the copy inside the signed region and the
+   one the real loader goes by. In 1.00 every VSH-mode module has `0x0800` in the header and
+   `0x0000` in the ELF. Reading only the ELF's, `g_runningVSH` never got set, so
+   `LoadAndStartVshKernelModules()` never ran and `vshmain` came up with ~900,000 unresolved
+   `scePaf` calls. `__KernelLoadELFFromPtr` now takes both.
+
+2. **A module attribute was passed straight through as a thread attribute.** `__KernelStartModule`
+   used `nm.attribute` as the start thread's attributes, which works only because kernel mode
+   (`0x1000`) means the same thing in both. VSH mode (`0x0800`) isn't in the user mask, so with (1)
+   fixed, `paf.prx` and every other user-mode VSH module was refused with "illegal thread
+   attributes 00000800" instead of started. Masked off at the call.
+
+3. **`heaparea1.prx` was never loaded.** `paf.prx` imports `scePafHeaparea` and calls it from its
+   own `module_start` to get the block it allocates out of; a 2KB module whose constructors make
+   that arena (an Fpl of `0x840000` bytes) is what exports it. With the import unresolved, paf's
+   heap was never created, its first `new` returned null, and it stored through it - `sw v0,0(v0)`
+   with `v0 == 0`, six instructions into the XMB's startup. It's loaded before paf now. The old
+   fallback that patched a fixed offset (`0x18D728`) inside scePaf's BSS only runs when heaparea
+   can't be loaded, and is bounded to the module's own memory - that offset is past the end of
+   1.00's much smaller scePaf, so it used to write into the block next door.
+
+4. **Nothing waited for those `module_start`s.** `__KernelStartModule` only queues a start thread.
+   Every VSH module's start thread was still `READY` when `vshmain`'s root thread ran, so load
+   order bought nothing - heaparea's constructors hadn't run when paf asked it for the arena. The
+   root thread now waits for them through the same `startingPlugins` mechanism plugins use, which
+   also means they start one at a time and in order, as on hardware. Only the VSH UI modules are
+   waited on: the kernel drivers block on hardware that isn't emulated (`sceSYSCON_Driver` parks on
+   a semaphore), so waiting for those would hang the boot.
+
+Two smaller things fell out of the same run: the `_01g` model-suffixed driver names don't exist in
+1.00 (`memlmd.prx`, `loadexec.prx`), so the loader tries the plain name too and treats a genuinely
+absent module as a warning; and `ModuleMgrForKernel` was missing `sceKernelLoadModuleVSH`, which is
+how vshmain loads its own plugins out of `flash0:/vsh/module/`. SHA-1("sceKernelLoadModuleVSH") is
+`a4370e7c` - the existing `d5ddab1f` entry carries the name but cannot be that function. The other
+two NIDs vshbridge imports from that library crack the same way: `f0cac59e` is
+`sceKernelLoadModuleBufferVSH` (now registered, it's the same implementation as the USB/WLAN one)
+and `91b87fae` is `sceKernelLoadModuleVSHByID` (not implemented).
+
+With those, a 1.00 XMB starts `opening_plugin`, `impose_plugin`, `auth_plugin`, `osk_plugin`,
+`sysconf_plugin`, `music_plugin` and `video_plugin`, and runs indefinitely, flipping between
+`0x04000000` and `0x04088000` at 512/8888 roughly every frame.
+
+Not a lead, though it looks like one: the four `sceDisplaySetFrameBuf(0x04000000, 480, 1, ...)`
+calls during startup that PPSSPP rejects with `INVALID_SIZE`. Real hardware rejects a 480 stride
+too - `pspautotests/tests/display/setframebuf.expected`, captured on a PSP, has
+`Latched -> 480: Failed (80000104)`. The XMB's actual presentation is the 512-stride calls that
+follow.
+
 ## The red error screen
 
 What is known, all measured from a 40-emulated-second `--vsh` boot:

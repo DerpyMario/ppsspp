@@ -1145,57 +1145,96 @@ static bool ShouldHLEModuleForLoad(std::string_view modname, bool *wasDisabledMa
 // these just load and run through the normal interpreter/JIT like any other PRX, same as the
 // existing 4 VSH-specific modules below. Order matches JPCSP's load order exactly, in case
 // later modules depend on earlier ones having already initialized.
-static void LoadAndStartVshKernelModule(const char *path, SceKernelSMOption *smoption) {
+// Set while loading heaparea1.prx, which is what really hands scePaf its heap - see the arena
+// patch in __KernelLoadELFFromPtr, which is only a fallback for when this didn't load.
+static bool g_loadedPafHeapArea = false;
+
+// waitFor, when given, collects the modules whose module_start has to finish before the module
+// waiting on them runs - see LoadAndStartVshKernelModules. It borrows the mechanism plugins use
+// (startingPlugins/pluginWaitingThread), since it's the same problem: __KernelStartModule only
+// queues a start thread, and nothing else makes the caller wait for it.
+static bool LoadAndStartVshKernelModule(const char *path, PSPModule *waitFor, SceUID waitingThread) {
 	std::string error_string;
 	SceUID moduleId = KernelLoadModule(path, &error_string);
 	if (moduleId < 0) {
 		WARN_LOG(Log::sceModule, "LoadAndStartVshKernelModules: failed to load %s: %s", path, error_string.c_str());
-		return;
+		return false;
 	}
-	int result = __KernelStartModule(moduleId, 0, 0, 0, smoption, nullptr);
+	bool needsWait = false;
+	int result = __KernelStartModule(moduleId, 0, 0, 0, nullptr, &needsWait);
 	if (result < 0) {
 		WARN_LOG(Log::sceModule, "LoadAndStartVshKernelModules: failed to start %s (uid=%d)", path, moduleId);
+		return false;
 	}
+	if (waitFor && needsWait) {
+		u32 error;
+		if (PSPModule *started = kernelObjects.Get<PSPModule>(moduleId, error)) {
+			waitFor->startingPlugins.push_back(moduleId);
+			started->pluginWaitingThread = waitingThread;
+			return true;
+		}
+	}
+	return false;
 }
 
-static void LoadAndStartVshKernelModules() {
+// Loads the first of these that's there. Some modules are named per hardware revision in later
+// firmwares (memlmd_01g.prx) and not in the early ones (memlmd.prx), and some don't exist at all
+// in a given version - a missing one is only worth a warning.
+static bool LoadAndStartVshKernelModuleAny(std::initializer_list<const char *> paths, PSPModule *waitFor = nullptr, SceUID waitingThread = 0) {
+	for (const char *path : paths) {
+		if (pspFileSystem.GetFileInfo(path).exists) {
+			return LoadAndStartVshKernelModule(path, waitFor, waitingThread);
+		}
+	}
+	WARN_LOG(Log::sceModule, "LoadAndStartVshKernelModules: %s isn't in this firmware", paths.begin()[0]);
+	return false;
+}
+
+// Returns true if anything was registered with waitingModule, i.e. the caller has to wait.
+static bool LoadAndStartVshKernelModules(PSPModule *waitingModule, SceUID waitingThread) {
 	// These 11 are small, simple kernel drivers (a few KB to ~100KB of code each) that don't
 	// declare their own smaller module_start_thread_stacksize, so __KernelStartModule's
 	// generic 0x40000 (256KB) default applies to every one of them. 11 of
 	// them at 256KB each (2.75MB) is a lot relative to the 4MB kernel memory pool.
 	//
 	// If we run out of kernel memory for some reason, we can force these to a smaller stack size.
-	static const char *const vshSmallKernelModulePaths[] = {
-		"flash0:/kd/dmacman.prx",
-		"flash0:/kd/systimer.prx",
-		"flash0:/kd/memlmd_01g.prx",
-		"flash0:/kd/loadexec_01g.prx",
-		"flash0:/kd/lowio.prx",
-		"flash0:/kd/idstorage.prx",
-		"flash0:/kd/syscon.prx",
-		"flash0:/kd/rtc.prx",
-		"flash0:/kd/wlan.prx",
-		"flash0:/kd/wlanfirm_01g.prx",
-		"flash0:/kd/utility.prx",
-	};
+	//
+	// The _01g names are how later firmwares split a driver per hardware revision; 1.00 predates
+	// that and ships the plain name, and has no lowio or wlanfirm at all.
 	/*
 	SceKernelSMOption smallStackOption{};
 	smallStackOption.size = sizeof(smallStackOption);
 	smallStackOption.stacksize = 0x40000;
 	*/
-	for (const char *path : vshSmallKernelModulePaths) {
-		LoadAndStartVshKernelModule(path, nullptr);
-	}
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/dmacman.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/systimer.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/memlmd_01g.prx", "flash0:/kd/memlmd.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/loadexec_01g.prx", "flash0:/kd/loadexec.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/lowio.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/idstorage.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/syscon.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/rtc.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/wlan.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/wlanfirm_01g.prx", "flash0:/kd/wlanfirm.prx"});
+	LoadAndStartVshKernelModuleAny({"flash0:/kd/utility.prx"});
 
-	static const char *const vshUiKernelModulePaths[] = {
-		"flash0:/kd/vshbridge.prx",
-		"flash0:/vsh/module/paf.prx",
-		"flash0:/vsh/module/common_gui.prx",
-		"flash0:/vsh/module/common_util.prx",
-	};
-	for (const char *path : vshUiKernelModulePaths) {
-		LoadAndStartVshKernelModule(path, nullptr);
-	}
+	// These four have to have finished starting before vshmain's own code runs, and in this order,
+	// so they're registered for the wait. On hardware the loader starts them one at a time.
+	//
+	// heaparea1.prx is a two-kilobyte module whose whole job is to own the block scePaf allocates
+	// out of and export it as scePafHeaparea - which paf.prx imports and calls from its own
+	// module_start. Without it that import goes unresolved, so paf's heap never gets created, its
+	// first allocation returns null, and it stores through it: a write to address 0 a few
+	// instructions into the XMB's startup. Its constructors are what make the arena (an Fpl of
+	// 0x840000 bytes), so loading it isn't enough - it has to have run, too.
+	bool waiting = false;
+	waiting |= LoadAndStartVshKernelModule("flash0:/kd/vshbridge.prx", waitingModule, waitingThread);
+	g_loadedPafHeapArea = LoadAndStartVshKernelModuleAny({"flash0:/vsh/module/heaparea1.prx", "flash0:/vsh/module/heaparea2.prx"}, waitingModule, waitingThread);
+	waiting |= g_loadedPafHeapArea;
+	waiting |= LoadAndStartVshKernelModule("flash0:/vsh/module/paf.prx", waitingModule, waitingThread);
+	waiting |= LoadAndStartVshKernelModule("flash0:/vsh/module/common_gui.prx", waitingModule, waitingThread);
+	waiting |= LoadAndStartVshKernelModule("flash0:/vsh/module/common_util.prx", waitingModule, waitingThread);
+	return waiting;
 }
 
 // filename is only used for dumping/metadata.
@@ -1501,11 +1540,18 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 	modinfo = (const PspModuleInfo *)Memory::GetPointerUnchecked(modinfoaddr);
 
 	module->nm.nsegment = reader.GetNumSegments();
-	module->nm.attribute = modinfo->moduleAttrs;
+	// Two copies of the attributes exist and they don't always agree: the one in the ELF's module
+	// info, and the one in the ~PSP header, which is the copy inside the signed region and so the
+	// one the real loader goes by (we already trust it for the kernel-mode bit above). Every VSH
+	// module in 1.00 has 0x0800 in the header and 0x0000 in the ELF - reading only the ELF's, VSH
+	// mode went unnoticed there and none of the modules vshmain imports from got loaded, leaving
+	// the XMB black with a few hundred thousand unresolved scePaf calls. Take both.
+	module->nm.attribute = modinfo->moduleAttrs | (head ? (u32)head->attribute : 0);
 	if ((module->nm.attribute & PSP_MODULE_VSH_MODE) != 0) {
 		// Used by the PSP's Visual Shell (VSH/XMB) and modules it loads, such as vshmain.prx.
 		g_runningVSH = true;
-		INFO_LOG(Log::sceModule, "VSH mode module detected: %s", modinfo->name);
+		INFO_LOG(Log::sceModule, "VSH mode module detected: %s (attributes %04x/%04x)", modinfo->name,
+			modinfo->moduleAttrs, head ? head->attribute : 0);
 	}
 
 	// OK, even if it's an ELF module, it might be one we shouldn't fully load and execute!
@@ -1533,26 +1579,31 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 	module->nm.gp_value = modinfo->gp;
 	strncpy(module->nm.name, modinfo->name, ARRAY_SIZE(module->nm.name));
 
-	if (equals(module->nm.name, "scePaf_Module")) {
-		// NOTE: This hackery is likely firmware-version-specific, so will need tweaking for
-		// other firmware versions than 6.61.
+	if (equals(module->nm.name, "scePaf_Module") && !g_loadedPafHeapArea) {
+		// Fallback for a firmware whose heaparea1.prx we couldn't load - normally the arena comes
+		// from that module, which exports scePafHeaparea for exactly this (see
+		// LoadAndStartVshKernelModules). Patching a fixed offset is a guess about where a
+		// particular build of scePaf keeps the pointer, so it's bounded to the module's own
+		// memory: 6.61's slot is well past the end of 1.00's much smaller scePaf.
 		//
 		// scePaf's own heap allocator expects a real memory-pool base address to already be
-		// patched into this BSS slot before any of its code runs. Real hardware's loader (or
-		// an early kernel init step) apparently does this - checked all 27 of scePaf's
-		// exported data vars, this address isn't one of them, so it's not the normal NID
-		// var-import linking path. Without this, offsets from scePaf's internal
-		// bump-allocator get used directly as absolute pointers, crashing almost immediately
-		// when a client module (e.g. vsh_module) makes its first heap allocation.
-		// See docs/VSHBootInvestigation.md for the full investigation.
-		const u32 scePafHeapArenaOffset = 0x18D728;  // Offset from module base to the BSS pointer slot.
+		// patched into this BSS slot before any of its code runs. Without it, offsets from
+		// scePaf's internal bump-allocator get used directly as absolute pointers, crashing
+		// almost immediately when a client module (e.g. vsh_module) makes its first heap
+		// allocation. See docs/VSHBootInvestigation.md for the full investigation.
+		const u32 scePafHeapArenaOffset = 0x18D728;  // Offset from module base to the BSS pointer slot (6.61).
 		u32 scePafHeapArenaSize = 0x00850000;  // Matches scePaf's own compiled-in default heap size.
-		u32 arenaAddr = userMemory.Alloc(scePafHeapArenaSize, false, "scePafHeapArena");
 		u32 patchAddr = module->memoryBlockAddr + scePafHeapArenaOffset;
-		if (arenaAddr != (u32)-1 && Memory::IsValid4AlignedAddress(patchAddr)) {
-			Memory::WriteUnchecked_U32(arenaAddr, patchAddr);
+		if (scePafHeapArenaOffset + 4 > module->memoryBlockSize || !Memory::IsValid4AlignedAddress(patchAddr)) {
+			WARN_LOG(Log::sceModule, "No scePafHeaparea module, and %s has no heap arena slot at +%08x - the XMB won't get far",
+				module->nm.name, scePafHeapArenaOffset);
 		} else {
-			WARN_LOG(Log::sceModule, "Failed to patch scePaf heap arena pointer");
+			u32 arenaAddr = userMemory.Alloc(scePafHeapArenaSize, false, "scePafHeapArena");
+			if (arenaAddr != (u32)-1) {
+				Memory::WriteUnchecked_U32(arenaAddr, patchAddr);
+			} else {
+				WARN_LOG(Log::sceModule, "Failed to patch scePaf heap arena pointer");
+			}
 		}
 	}
 
@@ -2029,6 +2080,7 @@ bool KernelModuleIsKernelMode(SceUID uid) {
 void __KernelLoadReset() {
 	// Wipe kernel here, loadexec should reset the entire system
 	g_runningVSH = false;
+	g_loadedPafHeapArea = false;
 	if (__KernelIsRunning()) {
 		u32 error;
 		while (!loadedModules.empty()) {
@@ -2121,17 +2173,6 @@ static bool __KernelLoadExecFromPtr(MIPSState * mips, const u8 *data, size_t siz
 	if (module->nm.module_start_thread_stacksize != 0)
 		option.stacksize = module->nm.module_start_thread_stacksize;
 
-	if (g_runningVSH) {
-		// NOTE: JPCSP's --vsh handler additionally forces the root thread into kernel mode
-		// with the lowest priority (0x7E) after loading, to mirror real hardware. Tried here
-		// and reverted (see docs/VSHBootInvestigation.md, Attempt 17) - it changes thread
-		// scheduling order enough that sceVshBridge_Driver's thread runs before some
-		// precondition it needs is ready, regressing all the way back to the very first
-		// crash this investigation fixed (an immediate `break` in sceVshBridge_Driver). Left
-		// as the default module-declared attr/priority instead.
-		LoadAndStartVshKernelModules();
-	}
-
 	INFO_LOG(Log::System, "Starting modules...");
 	if (paramPtr)
 		__KernelStartModule(module, param.args, (const char*)param_argp, &option);
@@ -2140,9 +2181,24 @@ static bool __KernelLoadExecFromPtr(MIPSState * mips, const u8 *data, size_t siz
 
 	__KernelStartIdleThreads(module->GetUID());
 
-	// Wait until plugins are loaded
+	// Wait until the VSH's own modules and any plugins are done starting. Both have to happen
+	// after the root thread exists, since that's the thread that does the waiting.
+	//
+	// NOTE: JPCSP's --vsh handler additionally forces the root thread into kernel mode with the
+	// lowest priority (0x7E) after loading, to mirror real hardware. Tried here and reverted (see
+	// docs/VSHBootInvestigation.md, Attempt 17) - it changes thread scheduling order enough that
+	// sceVshBridge_Driver's thread runs before some precondition it needs is ready, regressing all
+	// the way back to the very first crash this investigation fixed (an immediate `break` in
+	// sceVshBridge_Driver). Left as the default module-declared attr/priority instead.
 	module->startingPlugins.clear();
+	bool waitForStarts = false;
+	if (g_runningVSH) {
+		waitForStarts = LoadAndStartVshKernelModules(module, __KernelGetCurThread());
+	}
 	if (HLEPlugins::Load(module, __KernelGetCurThread())) {
+		waitForStarts = true;
+	}
+	if (waitForStarts) {
 		__KernelWaitCurThread(WAITTYPE_PLUGIN, module->GetUID(), 1, 0, false, "started plugins");
 		__KernelReSchedule("Started plugins");
 	}
@@ -2383,7 +2439,12 @@ int __KernelStartModule(SceUID moduleId, u32 argsize, u32 argAddr, u32 returnVal
 
 	u32 priority = 0x20;
 	u32 stacksize = 0x40000;
-	int attribute = module->nm.attribute;
+	// A module attribute stands in for a thread attribute here, which works only because the one
+	// bit that matters, kernel mode (0x1000), happens to mean the same thing in both. VSH mode
+	// (0x0800) doesn't exist in thread-attribute space at all, and isn't in the user mask, so
+	// leaving it in gets every user-mode VSH module - paf.prx and the rest of what the XMB needs -
+	// refused with "illegal thread attributes" instead of started.
+	int attribute = module->nm.attribute & ~PSP_MODULE_VSH_MODE;
 	u32 entryAddr = module->nm.entry_addr;
 
 	if (module->nm.module_start_func != 0 && module->nm.module_start_func != (u32)-1) {
@@ -3050,6 +3111,13 @@ const HLEFunction ModuleMgrForKernel[] = {
 	{0xD675EBB8, &WrapU_UUU<sceKernelSelfStopUnloadModule>,             "sceKernelSelfStopUnloadModule",           'x', "xxx",   HLE_KERNEL_SYSCALL },
 	{0xD5DDAB1F, &WrapU_CUU<sceKernelLoadModuleVSH>,                    "sceKernelLoadModuleVSH",                  'x', "sxx",   HLE_KERNEL_SYSCALL },
 	{0xD86DD11B, &WrapU_C<sceKernelSearchModuleByName>,                 "sceKernelSearchModuleByName",             'x', "s",     HLE_KERNEL_SYSCALL },
+	// New entries at the end - a resolved import is a syscall opcode encoding the index here.
+	//
+	// SHA-1("sceKernelLoadModuleVSH") is a4370e7c, and that's the NID vshbridge.prx really imports;
+	// the D5DDAB1F entry above carries the name but can't be that function. Both go to the same
+	// place, so leaving the older entry where it is costs nothing and keeps the indices stable.
+	{0xA4370E7C, &WrapU_CUU<sceKernelLoadModuleVSH>,                    "sceKernelLoadModuleVSH",                  'x', "sxx",   HLE_KERNEL_SYSCALL },
+	{0xF0CAC59E, &WrapI_UUUU<sceKernelLoadModuleBufferUsbWlan>,         "sceKernelLoadModuleBufferVSH",            'i', "xxxx",  HLE_KERNEL_SYSCALL },
 };
 
 void Register_ModuleMgrForUser() {
