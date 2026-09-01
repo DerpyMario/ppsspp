@@ -1,8 +1,8 @@
 name: Build Windows
 
-# Windows-only build across all three architectures the Visual Studio solution supports.
-# The main "Build" workflow covers x64 and ARM64 among many other targets; this one adds Win32,
-# which nothing else in CI builds, and gives a quick way to get all three from one manual run.
+# Builds all three architectures the Visual Studio solution supports, and is the workflow that
+# runs on every push. The manual "Build" workflow covers x64 and ARM64 plus UWP, libretro and the
+# test suites; this one adds Win32, which nothing else in CI builds.
 on:
   workflow_dispatch:
     inputs:
