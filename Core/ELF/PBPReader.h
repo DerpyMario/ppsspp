@@ -54,6 +54,11 @@ public:
 	bool GetSubFile(PBPSubFile file, std::vector<u8> *out) const;
 	bool GetSubFileAsString(PBPSubFile file, std::string *out) const;
 
+	// Reads at most the first size bytes of a subfile, returning how many it got. For sniffing a
+	// magic number without pulling the whole subfile into memory - a DATA.PSAR can be hundreds of
+	// megabytes, and GetSubFile would read all of it.
+	size_t PeekSubFile(PBPSubFile file, u8 *out, size_t size) const;
+
 	size_t GetSubFileSize(PBPSubFile file) const {
 		const int num = (int)file;
 		if (num < 0 || num >= (int)ARRAY_SIZE(header_.offsets))

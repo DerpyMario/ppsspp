@@ -118,6 +118,13 @@ bool UnpackPSAR(const u8 *psar, size_t psarSize, const Path &outputDir, const PS
 // from whatever game the user already has rather than a separate download.
 bool UnpackUpdater(const Path &filename, const Path &outputDir, const PSARUnpackOptions &options, PSARUnpackStats *stats, std::string *error);
 
+// Whether UnpackUpdater can install from this file - a downloaded updater EBOOT.PBP, a bare
+// DATA.BIN, or a disc with an updater on it. Cheap: it looks at headers, never at the archive
+// contents. title, when asked for, is the updater's SFO title ("PSP(tm) Update ver 6.61") and can
+// be empty even for a real updater - the oldest ones don't carry one. error, when asked for, says
+// what was found instead.
+bool IsUpdaterFile(const Path &filename, std::string *title = nullptr, std::string *error = nullptr);
+
 // What a game disc's bundled firmware updater says about itself. All of this comes from the
 // PARAM.SFO and the directory entry next to the archive, so gathering it costs a couple of small
 // reads - no decryption, and the archive itself is never touched.

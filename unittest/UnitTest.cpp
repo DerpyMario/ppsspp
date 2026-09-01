@@ -107,6 +107,8 @@
 #include "Core/MemMap.h"
 #include "Core/KeyMap.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/Util/PSARUnpack.h"
+#include "Common/File/FileUtil.h"
 #include "Core/MIPS/MIPSVFPUUtils.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "GPU/Common/GPUStateUtils.h"
@@ -2892,6 +2894,81 @@ bool TestLzrc();
 bool TestKL4E();
 bool TestDemangle();
 
+// IsUpdaterFile decides whether the install-firmware flow accepts a file. It deliberately doesn't
+// ask the PARAM.SFO - the disc id that marks later updaters, MSTKUPDATE, isn't in a 1.00 one, and
+// gating on it silently rejected exactly the updater this fork exists to install. What it asks
+// instead is whether there's a firmware archive in there, which also has to keep out the ordinary
+// PBPs that carry a DATA.PSAR of their own (a PSN game's holds an NPUMDIMG, a PS1 classic's a
+// PSISOIMG).
+static bool WriteTestFile(const Path &path, const std::vector<u8> &data) {
+	return File::WriteDataToFile(false, data.data(), data.size(), path);
+}
+
+// A PBP with nothing in it but a DATA.PSAR of psarSize bytes starting with the given magic.
+static std::vector<u8> MakeTestPBP(const char *psarMagic, size_t psarSize) {
+	std::vector<u8> pbp;
+	auto pushU32 = [&pbp](u32 value) {
+		for (int i = 0; i < 4; i++) {
+			pbp.push_back((u8)(value >> (i * 8)));
+		}
+	};
+	const u32 headerSize = 4 + 4 + 8 * 4;
+	pbp.insert(pbp.end(), { 0x00, 'P', 'B', 'P' });
+	pushU32(0x00010000);
+	// Every subfile is empty and starts where the next one does, except the PSAR, which is the rest.
+	for (int i = 0; i < 8; i++) {
+		pushU32(headerSize);
+	}
+	pbp.resize(headerSize + psarSize, 0);
+	memcpy(&pbp[headerSize], psarMagic, std::min(strlen(psarMagic), psarSize));
+	return pbp;
+}
+
+bool TestUpdaterDetect() {
+	const Path tempDir = Path(g_Config.internalDataDirectory) / "updater_test";
+	File::CreateFullPath(tempDir);
+
+	// A downloaded updater: a PBP whose DATA.PSAR is a firmware archive. No PARAM.SFO at all, like
+	// the early updaters, so nothing but the archive says what this is.
+	const Path pbp = tempDir / "EBOOT.PBP";
+	EXPECT_TRUE(WriteTestFile(pbp, MakeTestPBP("PSAR", 0x80)));
+	std::string title = "not touched";
+	std::string error = "not touched";
+	EXPECT_TRUE(IsUpdaterFile(pbp, &title, &error));
+	EXPECT_TRUE(title.empty());
+
+	// A PSN game and a PS1 classic both have a DATA.PSAR, and neither is a firmware.
+	const Path npumd = tempDir / "NPUMDIMG.PBP";
+	EXPECT_TRUE(WriteTestFile(npumd, MakeTestPBP("NPUMDIMG", 0x80)));
+	EXPECT_FALSE(IsUpdaterFile(npumd));
+	const Path psiso = tempDir / "PSISOIMG.PBP";
+	EXPECT_TRUE(WriteTestFile(psiso, MakeTestPBP("PSISOIMG0000", 0x80)));
+	EXPECT_FALSE(IsUpdaterFile(psiso));
+
+	// A PSAR too short to hold even a header isn't one either, in a PBP or on its own.
+	const Path stub = tempDir / "STUB.PBP";
+	EXPECT_TRUE(WriteTestFile(stub, MakeTestPBP("PSAR", 0x10)));
+	EXPECT_FALSE(IsUpdaterFile(stub));
+
+	// A disc updater's DATA.BIN is the same archive without the PBP around it.
+	const Path dataBin = tempDir / "DATA.BIN";
+	std::vector<u8> psar(0x100, 0);
+	memcpy(psar.data(), "PSAR", 4);
+	EXPECT_TRUE(WriteTestFile(dataBin, psar));
+	EXPECT_TRUE(IsUpdaterFile(dataBin));
+
+	// And anything else is rejected with a reason, rather than being taken on faith.
+	const Path junk = tempDir / "junk.bin";
+	EXPECT_TRUE(WriteTestFile(junk, std::vector<u8>(0x100, 0x42)));
+	error.clear();
+	EXPECT_FALSE(IsUpdaterFile(junk, nullptr, &error));
+	EXPECT_FALSE(error.empty());
+	EXPECT_FALSE(IsUpdaterFile(tempDir / "nothing_here.pbp"));
+
+	File::DeleteDirRecursively(tempDir);
+	return true;
+}
+
 // Tab/Shift+Tab focus navigation walks the view hierarchy in declaration order rather than by
 // geometry, so what it does is entirely determined by CollectTabOrder - which is worth pinning
 // down, since the interesting cases (nesting, hidden tabs, disabled items) are all structural.
@@ -3023,6 +3100,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(ZipSlip),
 	TEST_ITEM(Lzrc),
 	TEST_ITEM(KL4E),
+	TEST_ITEM(UpdaterDetect),
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),

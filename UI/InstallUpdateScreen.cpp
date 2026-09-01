@@ -32,31 +32,27 @@
 
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
-#include "Core/Loaders.h"
 #include "Core/Util/PathUtil.h"
 
-#include "UI/GameInfoCache.h"
 #include "UI/InstallUpdateScreen.h"
 #include "UI/MiscViews.h"
 
 bool InstallFirmwareUpdateFromFile(ScreenManager *screenManager, const Path &path) {
-	// Same identification the launcher does - an updater is a PBP whose SFO says MSTKUPDATE, and
-	// its title carries the version. Picked from a file browser there's no cached info yet, so
-	// this has to wait for the scan.
-	const GameInfoFlags neededFlags = GameInfoFlags::FILE_TYPE | GameInfoFlags::PARAM_SFO;
-	std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, path, neededFlags);
-	info->WaitUntilReady(neededFlags);
+	// The unpacker wants the PBP itself, not the folder it happens to sit in.
+	const Path file = File::IsDirectory(path) ? path / "EBOOT.PBP" : path;
 
-	const bool isPBP = info->fileType == IdentifiedFileType::PSP_PBP || info->fileType == IdentifiedFileType::PSP_PBP_DIRECTORY;
-	if (!isPBP || info->id != "MSTKUPDATE") {
+	// Asks the archive rather than the PARAM.SFO, so this recognizes the early updaters too - see
+	// IsUpdaterFile. The title comes back from the same read, and is empty for the ones without one.
+	std::string title;
+	std::string error;
+	if (!IsUpdaterFile(file, &title, &error)) {
 		auto iz = GetI18NCategory(I18NCat::INSTALLZIP);
-		g_OSD.Show(OSDType::MESSAGE_ERROR, iz->T("Not a PSP firmware update"), path.GetFilename());
+		WARN_LOG(Log::Loader, "Not a firmware updater: %s", error.c_str());
+		g_OSD.Show(OSDType::MESSAGE_ERROR, iz->T("Not a PSP firmware update"), file.GetFilename());
 		return false;
 	}
 
-	// The unpacker wants the PBP itself, not the folder it happens to sit in.
-	const Path pbpPath = info->fileType == IdentifiedFileType::PSP_PBP ? path : path / "EBOOT.PBP";
-	screenManager->push(new InstallUpdateScreen(pbpPath, info->GetTitle()));
+	screenManager->push(new InstallUpdateScreen(file, title));
 	return true;
 }
 

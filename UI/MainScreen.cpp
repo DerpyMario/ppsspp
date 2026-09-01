@@ -56,6 +56,7 @@
 #include "UI/GameBrowser.h"
 #include "Core/Config.h"
 #include "Core/Loaders.h"
+#include "Core/Util/PSARUnpack.h"
 #include "Common/Data/Text/I18n.h"
 #include "Core/Util/DarwinFileSystemServices.h" // For the browser
 
@@ -92,10 +93,12 @@ static void LaunchFile(ScreenManager *screenManager, Screen *currentScreen, cons
 		case IdentifiedFileType::PSP_PBP:
 		case IdentifiedFileType::PSP_PBP_DIRECTORY:
 		{
-			// A firmware updater gets installed by PPSSPP rather than run - see
-			// InstallFirmwareUpdateFromFile. The info it needs is already in the cache by now.
-			if (info->id == "MSTKUPDATE") {
-				InstallFirmwareUpdateFromFile(screenManager, path);
+			// A firmware updater gets installed by PPSSPP rather than run. Asked of the archive
+			// inside the PBP rather than of the SFO, which the oldest updaters say nothing useful
+			// in - see IsUpdaterFile. It's a header read, so it's cheap enough to do per launch.
+			const Path pbpPath = info->fileType == IdentifiedFileType::PSP_PBP ? path : path / "EBOOT.PBP";
+			if (IsUpdaterFile(pbpPath)) {
+				InstallFirmwareUpdateFromFile(screenManager, pbpPath);
 				return;
 			}
 			break;

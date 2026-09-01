@@ -79,6 +79,20 @@ bool PBPReader::GetSubFile(PBPSubFile file, std::vector<u8> *out) const {
 	return true;
 }
 
+size_t PBPReader::PeekSubFile(PBPSubFile file, u8 *out, size_t size) const {
+	if (!file_) {
+		return 0;
+	}
+	const size_t available = GetSubFileSize(file);
+	if (available < size) {
+		size = available;
+	}
+	if (size == 0) {
+		return 0;
+	}
+	return file_->ReadAt(header_.offsets[(int)file], size, out);
+}
+
 bool PBPReader::GetSubFileAsString(PBPSubFile file, std::string *out) const {
 	if (!file_) {
 		out->clear();

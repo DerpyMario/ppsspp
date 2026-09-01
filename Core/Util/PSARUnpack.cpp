@@ -1040,6 +1040,81 @@ static bool ReadUpdaterPSAR(const Path &filename, std::vector<u8> *psar, std::st
 	return false;
 }
 
+// Whether UnpackUpdater can install from this file, asked without reading the archive out of it.
+//
+// The PARAM.SFO can't answer this. The disc id updaters are recognized by elsewhere, MSTKUPDATE,
+// only shows up in later ones - a 1.00 updater has nothing in its SFO that says what it is - so the
+// archive itself is what gets asked. The magic check is also what keeps ordinary PBPs out: a PSN
+// game's DATA.PSAR holds an NPUMDIMG and a PS1 classic's a PSISOIMG, so only a firmware archive
+// starts with "PSAR".
+bool IsUpdaterFile(const Path &filename, std::string *title, std::string *error) {
+	std::string localError;
+	if (!error) {
+		error = &localError;
+	}
+
+	FileLoader *loader = ConstructFileLoader(filename);
+	if (!loader || !loader->Exists()) {
+		*error = "Couldn't open " + filename.ToString();
+		delete loader;
+		return false;
+	}
+
+	SequentialHandleAllocator hAlloc;
+	if (ISOFileSystem *disc = OpenDisc(filename, loader, &hAlloc)) {
+		// A game disc with an updater on it.
+		u8 magic[4]{};
+		const bool ok = ReadFileMagic(disc, "/" + std::string(UPDATE_PSAR_SUFFIX), magic, sizeof(magic)) &&
+			ReadU32(magic) == PSAR_MAGIC;
+		std::vector<u8> sfo;
+		if (ok && title && ReadWholeFile(disc, ("/" + std::string(UPDATE_SFO_SUFFIX)).c_str(), &sfo)) {
+			*title = TitleFromSFO(sfo);
+		}
+		delete disc;
+		delete loader;
+		if (!ok) {
+			*error = "No updater on the disc " + filename.ToString();
+		}
+		return ok;
+	}
+
+	u8 magic[4]{};
+	loader->ReadAt(0, sizeof(magic), magic);
+
+	if (!memcmp(magic, "\0PBP", 4)) {
+		// A downloaded updater.
+		PBPReader pbp(loader);
+		u8 psarMagic[4]{};
+		const bool ok = pbp.IsValid() && pbp.GetSubFileSize(PBP_UNKNOWN_PSAR) >= 0x40 &&
+			pbp.PeekSubFile(PBP_UNKNOWN_PSAR, psarMagic, sizeof(psarMagic)) == sizeof(psarMagic) &&
+			ReadU32(psarMagic) == PSAR_MAGIC;
+		std::vector<u8> sfo;
+		if (ok && title && pbp.GetSubFile(PBP_PARAM_SFO, &sfo)) {
+			*title = TitleFromSFO(sfo);
+		}
+		delete loader;
+		if (!ok) {
+			*error = "No firmware archive in " + filename.ToString();
+		}
+		return ok;
+	}
+
+	if (ReadU32(magic) == PSAR_MAGIC) {
+		// A disc updater's DATA.BIN, or an archive someone already pulled out.
+		const s64 size = loader->FileSize();
+		delete loader;
+		if (size < 0x40 || size > PSAR_MAX_DISC_FILE_BYTES) {
+			*error = "Bad PSAR size in " + filename.ToString();
+			return false;
+		}
+		return true;
+	}
+
+	delete loader;
+	*error = filename.ToString() + " isn't an updater, a PSAR or a disc with one on it";
+	return false;
+}
+
 std::string BundledUpdateInfo::Describe() const {
 	if (!present) {
 		return std::string();
