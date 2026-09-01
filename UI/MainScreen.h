@@ -76,6 +76,7 @@ protected:
 	void OnGameSettings(UI::EventParams &e);
 	void OnCredits(UI::EventParams &e);
 	void OnBootVSH(UI::EventParams &e);
+	void OnInstallFirmware(UI::EventParams &e);
 	void OnPPSSPPOrg(UI::EventParams &e);
 	void OnForums(UI::EventParams &e);
 	void OnDownloadUpgrade(UI::EventParams &e);

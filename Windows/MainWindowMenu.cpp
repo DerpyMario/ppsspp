@@ -388,6 +388,16 @@ namespace MainWindow {
 		W32Util::MakeTopMost(GetHWND(), g_Config.bTopMost);
 	}
 
+	// PPSSPP unpacks a firmware updater itself rather than booting it - see
+	// InstallFirmwareUpdateFromFile in UI/InstallUpdateScreen.cpp. That's UI-layer work, so the
+	// pick is handed over as a message rather than acted on here.
+	static void InstallFirmwareAction(RequesterToken token) {
+		auto mm = GetI18NCategory(I18NCat::MAINMENU);
+		System_BrowseForFile(token, mm->T("Install firmware"), BrowseFileType::BOOTABLE, [](std::string_view value, int) {
+			System_PostUIMessage(UIMessage::REQUEST_FIRMWARE_INSTALL, ReplaceAll(value, "\\", "/"));
+		});
+	}
+
 	static void UmdSwitchAction(RequesterToken token) {
 		auto mm = GetI18NCategory(I18NCat::MAINMENU);
 		System_BrowseForFile(token, mm->T("Switch UMD"), BrowseFileType::BOOTABLE, [](std::string_view value, int) {
@@ -470,6 +480,10 @@ namespace MainWindow {
 
 		case ID_FILE_LOAD_MEMSTICK:
 			BrowseAndBoot(NON_EPHEMERAL_TOKEN, GetSysDirectory(DIRECTORY_GAME).ToString());
+			break;
+
+		case ID_FILE_INSTALL_FIRMWARE:
+			InstallFirmwareAction(NON_EPHEMERAL_TOKEN);
 			break;
 
 		case ID_FILE_LOAD_VSH:
@@ -1049,6 +1063,9 @@ namespace MainWindow {
 		// SetIngameMenuItemStates(), which UpdateCommands() also runs on every keypress - this only
 		// runs when a menu is about to open (WM_INITMENUPOPUP), so the disk hit is fine.
 		EnableMenuItem(menu, ID_FILE_LOAD_VSH, IsVSHInstalled() ? MF_ENABLED : MF_GRAYED);
+		// Installing writes over the NAND directory the running game may be reading out of, and
+		// only the main screen is around to show the install dialog anyway.
+		EnableMenuItem(menu, ID_FILE_INSTALL_FIRMWARE, GetUIState() == UISTATE_MENU ? MF_ENABLED : MF_GRAYED);
 
 #define CHECKITEM(item,value) 	CheckMenuItem(menu,item,MF_BYCOMMAND | ((value) ? MF_CHECKED : MF_UNCHECKED));
 		CHECKITEM(ID_DEBUG_IGNOREILLEGALREADS, g_Config.bIgnoreBadMemAccess);

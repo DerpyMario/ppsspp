@@ -8,12 +8,18 @@ feature - treat conclusions here as best-effort, not verified against hardware.
 
 ## How to get there without a command line
 
-The firmware doesn't have to be a NAND dump. Opening an official updater EBOOT.PBP from the main
-screen brings up `InstallUpdateScreen`, which unpacks it into the NAND directory (see
-`Core/Util/PSARUnpack.h`) - the same place `--vsh` boots from. Once something bootable is there,
-a **PSP menu** button appears next to Load/Settings on the main screen, and the install screen
-offers to boot straight into what it just installed. That mirrors JPCSP's flow, where running the
-updater is followed by a Reboot button into the XMB.
+The firmware doesn't have to be a NAND dump. An **Install firmware** button on the main screen
+(and *File > Install Firmware Update...* on Windows) asks for an official updater EBOOT.PBP and
+brings up `InstallUpdateScreen`, which unpacks it into the NAND directory (see
+`Core/Util/PSARUnpack.h`) - the same place `--vsh` boots from. Opening an updater any other way
+(the game browser, a file association, drag and drop) lands on the same screen. Once something
+bootable is there, a **PSP menu** button appears next to it, and the install screen offers to boot
+straight into what it just installed.
+
+PPSSPP does the unpacking itself; it does not run the updater. JPCSP boots the updater and lets it
+write the firmware, but that is a PSP application driving flash hardware PPSSPP doesn't emulate,
+and the updaters that get that far stall in their own script engine anyway. The end state is the
+same one JPCSP's Reboot button leads to.
 
 All the entry points - `--vsh`, the main screen button, the install screen, the Windows File menu
 and the ImGui debugger - go through `GetVSHPath()` (`Core/Util/PathUtil.h`), which is also what

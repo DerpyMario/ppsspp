@@ -92,13 +92,10 @@ static void LaunchFile(ScreenManager *screenManager, Screen *currentScreen, cons
 		case IdentifiedFileType::PSP_PBP:
 		case IdentifiedFileType::PSP_PBP_DIRECTORY:
 		{
-			// Check if it's an update file. If so, we'll offer to install it directly,
-			// instead of running it (which currently will not work).
+			// A firmware updater gets installed by PPSSPP rather than run - see
+			// InstallFirmwareUpdateFromFile. The info it needs is already in the cache by now.
 			if (info->id == "MSTKUPDATE") {
-				std::string title = info->GetTitle();  // includes the version.
-				// The unpacker wants the PBP itself, not the folder it happens to sit in.
-				const Path pbpPath = info->fileType == IdentifiedFileType::PSP_PBP ? path : path / "EBOOT.PBP";
-				screenManager->push(new InstallUpdateScreen(pbpPath, title));
+				InstallFirmwareUpdateFromFile(screenManager, path);
 				return;
 			}
 			break;
@@ -306,9 +303,14 @@ void MainScreen::CreateMainButtons(UI::ViewGroup *parent, bool portrait) {
 	}
 	if (vshInstalled_) {
 		// The PSP's own system software menu, booted straight out of the emulated flash0. Only
-		// offered once there's a firmware in the NAND directory to boot - see InstallUpdateScreen,
-		// which is how one gets there from an official updater.
+		// offered once there's a firmware in the NAND directory to boot.
 		parent->Add(portrait ? new Choice(ImageID("I_PSP"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("PSP menu")))->OnClick.Handle(this, &MainScreen::OnBootVSH);
+	}
+	if (System_GetPropertyBool(SYSPROP_HAS_FILE_BROWSER)) {
+		// Where a firmware comes from: point this at an official updater and PPSSPP unpacks it into
+		// the NAND directory itself. Kept next to the PSP menu button, since installing one is what
+		// makes that button appear.
+		parent->Add(portrait ? new Choice(ImageID("I_FOLDER_UPLOAD"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Install firmware")))->OnClick.Handle(this, &MainScreen::OnInstallFirmware);
 	}
 	parent->Add(portrait ? new Choice(ImageID("I_GEAR"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Game Settings", "Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
 	parent->Add(portrait ? new Choice(ImageID("I_INFO"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("About PPSSPP")))->OnClick.Handle(this, &MainScreen::OnCredits);
@@ -604,6 +606,8 @@ void MainScreen::sendMessage(UIMessage message, const char *value) {
 
 	if (message == UIMessage::REQUEST_GAME_BOOT) {
 		LaunchFile(screenManager(), this, Path(value));
+	} else if (message == UIMessage::REQUEST_FIRMWARE_INSTALL) {
+		InstallFirmwareUpdateFromFile(screenManager(), Path(value));
 	} else if (message == UIMessage::PERMISSION_GRANTED && !strcmp(value, "storage")) {
 		RecreateViews();
 	} else if (message == UIMessage::RECENT_FILES_CHANGED) {
@@ -632,6 +636,19 @@ void MainScreen::OnLoadFile(UI::EventParams &e) {
 			System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, value);
 		});
 	}
+}
+
+void MainScreen::OnInstallFirmware(UI::EventParams &e) {
+	if (!System_GetPropertyBool(SYSPROP_HAS_FILE_BROWSER)) {
+		return;
+	}
+	auto mm = GetI18NCategory(I18NCat::MAINMENU);
+	// BOOTABLE rather than a filter of its own: an updater is an ordinary EBOOT.PBP as far as any
+	// file dialog is concerned, and InstallFirmwareUpdateFromFile says so if the pick isn't one.
+	System_BrowseForFile(GetRequesterToken(), mm->T("Install firmware"), BrowseFileType::BOOTABLE, [](std::string_view value, int) {
+		// Posted rather than pushed directly - the callback can arrive on another thread.
+		System_PostUIMessage(UIMessage::REQUEST_FIRMWARE_INSTALL, value);
+	});
 }
 
 void MainScreen::DrawBackground(UIContext &dc) {

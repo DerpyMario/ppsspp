@@ -311,6 +311,8 @@ enum class UIMessage {
 	RECENT_FILES_CHANGED,
 	SAVE_FRAME_DUMP,
 	ADHOC_SERVER_LIST_CHANGED,
+	// Carries the path of an official PSP firmware updater to install - see InstallUpdateScreen.
+	REQUEST_FIRMWARE_INSTALL,
 };
 
 std::string System_GetProperty(SystemProperty prop);

@@ -113,40 +113,7 @@ Path DirectoryFileHandle::GetLocalPath(const Path &basePath, std::string_view lo
 	return basePath / localPath;
 }
 
-// The guest is case-insensitive about this and may or may not lead with a slash, so both sides get
-// normalized the same way before they're compared.
-static std::string NormalizeRedirectKey(std::string_view guestFilename) {
-	if (!guestFilename.empty() && guestFilename[0] == '/')
-		guestFilename = guestFilename.substr(1);
-	std::string key(guestFilename);
-	for (char &c : key) {
-		if (c >= 'a' && c <= 'z')
-			c = c - 'a' + 'A';
-		else if (c == '\\')
-			c = '/';
-	}
-	return key;
-}
-
-void DirectoryFileSystem::AddFileRedirect(std::string_view guestFilename, const Path &hostPath) {
-	redirects_[NormalizeRedirectKey(guestFilename)] = hostPath;
-}
-
-bool DirectoryFileSystem::ResolveRedirect(std::string_view internalPath, Path *hostPath) const {
-	if (redirects_.empty())
-		return false;
-	auto found = redirects_.find(NormalizeRedirectKey(internalPath));
-	if (found == redirects_.end())
-		return false;
-	*hostPath = found->second;
-	return true;
-}
-
 Path DirectoryFileSystem::GetLocalPath(std::string_view internalPath) const {
-	Path redirected;
-	if (ResolveRedirect(internalPath, &redirected))
-		return redirected;
-
 	if (internalPath.empty())
 		return basePath;
 
@@ -669,16 +636,7 @@ int DirectoryFileSystem::OpenFile(std::string filename, FileAccess access, const
 	OpenFileEntry entry;
 	entry.hFile.fileSystemFlags_ = flags;
 	u32 err = 0;
-	// DirectoryFileHandle::Open joins the two itself rather than going through GetLocalPath, so a
-	// redirect has to be applied here too - as the containing directory plus the real leaf name.
-	Path redirected;
-	bool success;
-	if (ResolveRedirect(filename, &redirected)) {
-		std::string leaf = redirected.GetFilename();
-		success = entry.hFile.Open(redirected.NavigateUp(), leaf, (FileAccess)(access & FILEACCESS_PSP_FLAGS), err);
-	} else {
-		success = entry.hFile.Open(basePath, filename, (FileAccess)(access & FILEACCESS_PSP_FLAGS), err);
-	}
+	bool success = entry.hFile.Open(basePath, filename, (FileAccess)(access & FILEACCESS_PSP_FLAGS), err);
 	if (err == 0 && !success) {
 		err = SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND;
 	}

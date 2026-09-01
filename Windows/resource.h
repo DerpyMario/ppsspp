@@ -171,6 +171,7 @@
 #define ID_OPTIONS_CONTROLS              40038
 #define ID_DEBUG_BREAKONLOAD             40039
 #define ID_FILE_LOAD_VSH                 40040
+#define ID_FILE_INSTALL_FIRMWARE         40237
 #define ID_OPTIONS_FRAMESKIP             40044
 #define IDC_MEMCHECK                     40045
 #define ID_FILE_MEMSTICK                 40046
@@ -362,7 +363,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        258
-#define _APS_NEXT_COMMAND_VALUE         40236
+#define _APS_NEXT_COMMAND_VALUE         40238
 #define _APS_NEXT_CONTROL_VALUE         1202
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

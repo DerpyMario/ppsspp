@@ -33,6 +33,15 @@
 #include "UI/BaseScreens.h"
 #include "UI/SimpleDialogScreen.h"
 
+class ScreenManager;
+
+// Opens the install screen for an official firmware updater. This is how a firmware gets into the
+// emulated NAND: PPSSPP unpacks the updater's archive itself rather than booting the updater and
+// letting it do the writing, which is a PSP application talking to flash hardware that isn't here.
+// Anything that isn't an updater gets a message saying so, and false back.
+// Briefly blocks on identifying the file, same as launching one does.
+bool InstallFirmwareUpdateFromFile(ScreenManager *screenManager, const Path &path);
+
 // An official PSP firmware updater (a PSP/GAME/UPDATE/EBOOT.PBP, or the folder holding one).
 // Running the updater itself isn't going to get anyone anywhere, but the firmware inside it is
 // exactly what the emulated flash0/flash1 want, so offer to unpack it into the NAND directory

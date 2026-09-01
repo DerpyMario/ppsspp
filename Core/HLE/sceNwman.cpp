@@ -36,6 +36,11 @@
 // place, and a negative return is the only failure signal. scePSAR_e564b1da does the same with the
 // size from its context at +0x104. Neither reads the word behind $a2 afterwards.
 //
+// Note PPSSPP no longer hands a downloaded updater the DATA.BIN it looks for - firmware is
+// installed from the menu instead of by running the updater (see UI/InstallUpdateScreen.cpp) - so
+// nothing normally gets as far as calling this. It stays because it's the module's real behavior,
+// and because a UMD-pressed updater, which carries its own DATA.BIN, still reaches it.
+//
 // That is exactly what PSARReader::DecodeBlock does offline, so this shares its decrypter rather
 // than growing a second one - see Core/Util/PSARUnpack.cpp and Core/ELF/PrxDecrypter.cpp. The
 // version-1 archives this driver reads are the ones that skip the AES "demangle" step, so the

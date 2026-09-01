@@ -512,6 +512,7 @@ BEGIN
         MENUITEM "", 0, MFT_SEPARATOR
         MENUITEM "Open New Instance",                       ID_FILE_OPEN_NEW_INSTANCE
         MENUITEM "", 0, MFT_SEPARATOR
+        MENUITEM "Install Firmware Update...",              ID_FILE_INSTALL_FIRMWARE
         MENUITEM "Load XMB (VSH)",                          ID_FILE_LOAD_VSH
         MENUITEM "", 0, MFT_SEPARATOR
 
