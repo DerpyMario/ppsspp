@@ -922,6 +922,66 @@ static int sysclib_strncmp(u32 s1, u32 s2, u32 size) {
 	return hleLogError(Log::sceKernel, 0, "Bad addresses");
 }
 
+// The BSD trio, which sceLflashFatfmt (the flash formatter a firmware updater runs) is the first
+// thing here to import. bcopy takes its arguments the other way round from memcpy - source first -
+// and like memmove it has to cope with overlap.
+static u32 sysclib_bcopy(u32 src, u32 dst, u32 size) {
+	if (Memory::IsValidRange(dst, size) && Memory::IsValidRange(src, size)) {
+		memmove(Memory::GetPointerWriteUnchecked(dst), Memory::GetPointerUnchecked(src), size);
+	}
+	if (MemBlockInfoDetailed(size)) {
+		NotifyMemInfoCopy(dst, src, size, "KernelBcopy/");
+	}
+	return hleLogVerbose(Log::sceKernel, 0);
+}
+
+static u32 sysclib_bzero(u32 destAddr, u32 size) {
+	if (Memory::IsValidRange(destAddr, size)) {
+		memset(Memory::GetPointerWriteUnchecked(destAddr), 0, size);
+	}
+	NotifyMemInfo(MemBlockFlags::WRITE, destAddr, size, "KernelBzero");
+	return hleLogVerbose(Log::sceKernel, 0);
+}
+
+// Reentrant strtok. The caller owns the state - a single guest pointer it passes back each time -
+// so unlike strtok there's nothing to keep on this side between calls.
+static u32 sysclib_strtok_r(u32 strAddr, u32 delimAddr, u32 savePtrAddr) {
+	if (!Memory::IsValidRange(savePtrAddr, 4) || !Memory::IsValidNullTerminatedString(delimAddr)) {
+		return hleLogError(Log::sceKernel, 0, "invalid address");
+	}
+	// A null first argument means "carry on where the saved pointer left off".
+	u32 pos = strAddr != 0 ? strAddr : Memory::ReadUnchecked_U32(savePtrAddr);
+	if (pos == 0 || !Memory::IsValidNullTerminatedString(pos)) {
+		Memory::WriteUnchecked_U32(0, savePtrAddr);
+		return hleLogDebug(Log::sceKernel, 0);
+	}
+
+	const std::string delims = Memory::GetCharPointerUnchecked(delimAddr);
+	const auto isDelim = [&delims](u8 c) { return delims.find((char)c) != std::string::npos; };
+
+	// Skip leading delimiters; nothing but delimiters left means the walk is over.
+	while (Memory::IsValidAddress(pos) && Memory::ReadUnchecked_U8(pos) != 0 && isDelim(Memory::ReadUnchecked_U8(pos))) {
+		pos++;
+	}
+	if (!Memory::IsValidAddress(pos) || Memory::ReadUnchecked_U8(pos) == 0) {
+		Memory::WriteUnchecked_U32(0, savePtrAddr);
+		return hleLogDebug(Log::sceKernel, 0);
+	}
+
+	// Then run to the next delimiter and cut the token there, leaving the rest for next time.
+	const u32 tokenStart = pos;
+	while (Memory::IsValidAddress(pos) && Memory::ReadUnchecked_U8(pos) != 0 && !isDelim(Memory::ReadUnchecked_U8(pos))) {
+		pos++;
+	}
+	if (Memory::IsValidAddress(pos) && Memory::ReadUnchecked_U8(pos) != 0) {
+		Memory::WriteUnchecked_U8(0, pos);
+		Memory::WriteUnchecked_U32(pos + 1, savePtrAddr);
+	} else {
+		Memory::WriteUnchecked_U32(0, savePtrAddr);
+	}
+	return hleLogDebug(Log::sceKernel, tokenStart);
+}
+
 static u32 sysclib_memmove(u32 dst, u32 src, u32 size) {
 	if (Memory::IsValidRange(dst, size) && Memory::IsValidRange(src, size)) {
 		memmove(Memory::GetPointerWriteUnchecked(dst), Memory::GetPointerUnchecked(src), size);
@@ -1016,6 +1076,11 @@ const HLEFunction SysclibForKernel[] =
 	{0x4C0E0274, &WrapU_UI<sysclib_strrchr>,                   "strrchr",                             'x', "xx",    HLE_KERNEL_SYSCALL },
 	{0xCE2F7487, &WrapU_U<sysclib_toupper>,                    "toupper",                             'x', "x",     HLE_KERNEL_SYSCALL },
 	{0XC2145E80, &WrapI_UIU<sysclib_snprintf>,                 "snprintf",                            'i', "xx",     HLE_KERNEL_SYSCALL },
+	// New entries go at the end - a resolved import is a syscall opcode encoding this index, and a
+	// savestate captures that opcode, so inserting above would repoint every later one.
+	{0x097049BD, &WrapU_UUU<sysclib_bcopy>,                    "bcopy",                               'x', "xxx",    HLE_KERNEL_SYSCALL },
+	{0x86FEFCE9, &WrapU_UU<sysclib_bzero>,                     "bzero",                               'x', "xx",     HLE_KERNEL_SYSCALL },
+	{0x1AB53A58, &WrapU_UUU<sysclib_strtok_r>,                 "strtok_r",                            'x', "xxx",    HLE_KERNEL_SYSCALL },
 };
 
 void Register_Kernel_Library()

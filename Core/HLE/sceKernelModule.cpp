@@ -2841,7 +2841,17 @@ SceUID sceKernelLoadModuleBufferUsbWlan(u32 size, u32 bufPtr, u32 flags, u32 lmo
 	const SceKernelLMOption *lmoption = 0;
 	if (lmoptionPtr) {
 		lmoption = (const SceKernelLMOption *)Memory::GetPointerOrException(lmoptionPtr);
-		WARN_LOG_REPORT(Log::Loader, "sceKernelLoadModuleBufferUsbWlan: unsupported options size=%08x, flags=%08x, pos=%d, access=%d, data=%d, text=%d", lmoption->size, lmoption->flags, lmoption->position, lmoption->access, lmoption->mpiddata, lmoption->mpidtext);
+		// The option that decides anything here is position, which is honored below - the rest name
+		// memory partitions, and nothing in PPSSPP models those. Calling the whole struct
+		// unsupported and reporting it was wrong for the ordinary case: a firmware updater passes
+		// one of these for every module it loads out of itself, all of them perfectly normal.
+		if (lmoption->mpidtext != 0 || lmoption->mpiddata != 0) {
+			DEBUG_LOG(Log::Loader, "sceKernelLoadModuleBufferUsbWlan: ignoring partition ids (text=%d, data=%d, access=%d)",
+				lmoption->mpidtext, lmoption->mpiddata, lmoption->access);
+		}
+		if (lmoption->position != PSP_SMEM_Low && lmoption->position != PSP_SMEM_High) {
+			WARN_LOG_REPORT(Log::Loader, "sceKernelLoadModuleBufferUsbWlan: unsupported position %d", lmoption->position);
+		}
 	}
 	std::string error_string;
 	PSPModule *module = nullptr;
