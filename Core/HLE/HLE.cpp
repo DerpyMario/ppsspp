@@ -897,6 +897,12 @@ static void CallSyscallWithoutFlags(const HLEFunction *info) {
 
 void LogBadSyscallAtPC(u32 pc, bool compilePhase) {
 	const LogLevel level = compilePhase ? LogLevel::LWARNING : LogLevel::LERROR;
+	// Working out what the syscall was means scanning every loaded module's imports and building a
+	// few strings, and an unresolved import that a module polls every frame gets here every time -
+	// so don't pay for it when nothing is going to print it.
+	if (!GenericLogEnabled(Log::HLE, level)) {
+		return;
+	}
 	const char *phase = compilePhase ? "compile" : "run";
 	std::string importModuleName, importingModuleName;
 	u32 nid = 0;

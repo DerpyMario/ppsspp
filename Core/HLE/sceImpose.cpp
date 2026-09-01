@@ -254,6 +254,10 @@ static int sceImposeSetStatus(int status) {
 	return hleLogDebug(Log::sceUtility, 0, "UNIMPL");
 }
 
+static int sceImposeGetStatus() {
+	return hleLogDebug(Log::sceUtility, 0, "UNIMPL");
+}
+
 const HLEFunction sceImpose_driver[] = {
 	{0XB497314D, &WrapI_IU<sceImpose_driver_B497314D>,     "sceImpose_driver_B497314D",     'i', "ix"},
 	{0XDC3BECFF, &WrapI_I<sceImposeGetParam>,              "sceImposeGetParam",             'i', "i" },
@@ -262,6 +266,19 @@ const HLEFunction sceImpose_driver[] = {
 	{0XBB12F974, &WrapI_I<sceImposeSetStatus>,             "sceImposeSetStatus",            'i', "i" },
 	// The 6.60 name for the same call the user-mode module exports as 0x8C943191.
 	{0X5557F4E2, &WrapU_UU<sceImposeGetBatteryIconStatus>, "sceImposeGetBatteryIconStatus", 'x', "xx"},
+	// New entries at the end - see the note in Core/HLE/sceKernelModule.cpp about a resolved import
+	// being a syscall opcode that encodes this index.
+	//
+	// A NID is the first four bytes of SHA-1(name), so it's checkable, and the five above it that
+	// name these same functions don't hash to them. vshbridge.prx imports the ones that do, and
+	// with them unregistered the XMB made ~83,000 unresolved-import syscalls per boot - 67,000 of
+	// them GetParam and 17,000 Changes, both polled every frame. Keeping the old numbers too:
+	// something evidently called them, and renumbering the table would break old savestates.
+	{0X531C9778, &WrapI_I<sceImposeGetParam>,             "sceImposeGetParam",             'i', "i" },
+	{0X810FB7FB, &WrapI_II<sceImposeSetParam>,            "sceImposeSetParam",             'i', "ii"},
+	{0XB415FC59, &WrapI_V<sceImposeChanges>,              "sceImposeChanges",              'i', ""  },
+	{0X9C8C6C81, &WrapI_I<sceImposeSetStatus>,            "sceImposeSetStatus",            'i', "i" },
+	{0X1B6E3400, &WrapI_V<sceImposeGetStatus>,            "sceImposeGetStatus",            'i', ""  },
 };
 
 void Register_sceImpose_driver() {
